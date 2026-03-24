@@ -3,7 +3,7 @@ package device;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 
-public class DeviceActionModel {
+public class DeviceActionModel implements Comparable<DeviceActionModel> {
     public DeviceActionModel() {
 
     }
@@ -42,36 +42,32 @@ public class DeviceActionModel {
      */
     private final long sequence = seqGenerator.getAndIncrement();
 
-    public byte[] getBytes() {
-        return bytes;
+    @Override
+    public int compareTo(DeviceActionModel other) {
+        // 1. 首先比较优先级 (数值越小越优先)
+        int res = Integer.compare(this.priority, other.priority);
+
+        // 2. 如果优先级一样，则比较序列号 (先入队的先发)
+        if (res == 0) {
+            res = Long.compare(this.sequence, other.getSequence());
+        }
+        return res;
     }
 
-    public void setBytes(byte[] bytes) {
-        this.bytes = bytes;
+    public byte[] getBytes() {
+        return bytes;
     }
 
     public BiConsumer<byte[], byte[]> getDataReceived() {
         return dataReceived;
     }
 
-    public void setDataReceived(BiConsumer<byte[], byte[]> dataReceived) {
-        this.dataReceived = dataReceived;
-    }
-
     public int getRetryCount() {
         return retryCount;
     }
 
-    public void setRetryCount(int retryCount) {
-        this.retryCount = retryCount;
-    }
-
     public int getPriority() {
         return priority;
-    }
-
-    public void setPriority(int priority) {
-        this.priority = priority;
     }
 
     public long getSequence() {
