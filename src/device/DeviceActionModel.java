@@ -8,8 +8,8 @@ public class DeviceActionModel implements Comparable<DeviceActionModel> {
 
     }
 
-    public DeviceActionModel(byte[] bytes, BiConsumer<byte[], byte[]> dataReceived, int retryCount, int priority) {
-        this.bytes = bytes;
+    public DeviceActionModel(byte[] writeBytes,int retryCount, int priority, BiConsumer<byte[], byte[]> dataReceived) {
+        this.writeBytes = writeBytes;
         this.dataReceived = dataReceived;
         this.retryCount = retryCount;
         this.priority = priority;
@@ -18,7 +18,7 @@ public class DeviceActionModel implements Comparable<DeviceActionModel> {
     /**
      * 写入的数据
      */
-    private byte[] bytes;
+    private byte[] writeBytes;
     /**
      * 回调函数:
      * 参数1：读取到的数据
@@ -54,8 +54,8 @@ public class DeviceActionModel implements Comparable<DeviceActionModel> {
         return res;
     }
 
-    public byte[] getBytes() {
-        return bytes;
+    public byte[] getWriteBytes() {
+        return writeBytes;
     }
 
     public BiConsumer<byte[], byte[]> getDataReceived() {
@@ -72,5 +72,9 @@ public class DeviceActionModel implements Comparable<DeviceActionModel> {
 
     public long getSequence() {
         return sequence;
+    }
+
+    public void setRetryCount(int retryCount) {
+        this.retryCount = retryCount;
     }
 }
