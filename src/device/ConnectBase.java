@@ -5,7 +5,6 @@ import java.util.PriorityQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 public abstract class ConnectBase {
     protected ConnectBase() {
@@ -40,9 +39,11 @@ public abstract class ConnectBase {
 
     /**
      * 获取链接名
+     *
      * @return
      */
     public abstract String getName();
+
     /**
      * 连接是否以及打开
      *
@@ -88,8 +89,13 @@ public abstract class ConnectBase {
      *
      * @param deviceActionModel 队列中的数据
      */
-    public abstract void write(DeviceActionModel deviceActionModel)  throws IOException;
+    public abstract void write(DeviceActionModel deviceActionModel) throws IOException;
 
+    /**
+     * 获取队列元素
+     * 先取优先队列，再取普通队列
+     * @return
+     */
     private DeviceActionModel getDeviceActionModel() {
         if (!priorityQueue.isEmpty()) {
             return priorityQueue.poll();
@@ -112,23 +118,28 @@ public abstract class ConnectBase {
     /**
      * 写入数据
      *
+     * @param strategy     队列策略
      * @param writeBytes   写入的数据
      * @param priority     优先级
      * @param retryCount   重试次数
      * @param dataReceived 响应回调
      */
-    public void write(byte[] writeBytes, int priority, int retryCount, BiConsumer<byte[], byte[]> dataReceived) {
-        this.writeByPriorityQueue(this.priorityQueue,writeBytes,priority,retryCount,dataReceived);
+    public void write(QueueStrategy strategy, byte[] writeBytes, int priority, int retryCount, BiConsumer<byte[], byte[]> dataReceived) {
+        this.enqueueAction(strategy, writeBytes, priority, retryCount, dataReceived);
     }
 
-    protected void writeByPriorityQueue(PriorityQueue<DeviceActionModel> priorityQueue, byte[] writeBytes, int priority, int retryCount, BiConsumer<byte[], byte[]> dataReceived) {
-        if (writeBytes == null || writeBytes.length < 1) {
+    protected void enqueueAction(QueueStrategy strategy, byte[] writeBytes, int priority, int retryCount, BiConsumer<byte[], byte[]> dataReceived) {
+        if (writeBytes == null || writeBytes.length < 1 || !isOpen()) {
             return;
         }
-        if (!isOpen()) {
-            return;
+
+        DeviceActionModel action = new DeviceActionModel(writeBytes, priority, retryCount, dataReceived);
+
+        switch (strategy) {
+            case PRIORITY -> this.priorityQueue.offer(action);
+            case SEQUENTIAL -> this.concurrentLinkedQueue.offer(action);
+            default -> throw new IllegalArgumentException("未知的队列策略: " + strategy);
         }
-        priorityQueue.offer(new DeviceActionModel(writeBytes, priority, retryCount, dataReceived));
         write();
     }
 
@@ -140,7 +151,7 @@ public abstract class ConnectBase {
             if (onReceived) {
                 return;
             }
-            if (priorityQueue.isEmpty()) {
+            if (getAllQueueTotalLength() < 1) {
                 return;
             }
             if (deviceFuture != null && !deviceFuture.isDone()) {

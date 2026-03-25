@@ -1,39 +1,23 @@
 package device;
 
+import device.utils.ClientBase;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
-public class TcpClient {
+public class TcpClient extends ClientBase<Socket> {
+    /**
+     * @param host 主机名
+     * @param port 端口号
+     */
     public TcpClient(String host, int port) {
-        this.charset = Charset.forName("GB2312");
         this.address = new InetSocketAddress(host, port);
     }
 
-    /**
-     * 服务器回发消息时触发
-     */
-    public BiConsumer<byte[], Integer> receiveEvent;
-    /**
-     * 存储所有订阅“链接打开”事件的观察者
-     */
-    private final List<Consumer<Socket>> openEventListeners = new ArrayList<>();
-    /**
-     * 存储所有订阅“链接关闭”事件的观察者
-     */
-    private final List<Consumer<Socket>> closeEventListeners = new ArrayList<>();
-    /**
-     * 字符编码 默认GB2312
-     */
-    public Charset charset;
     /**
      * 是否打开了链接
      */
@@ -54,80 +38,9 @@ public class TcpClient {
 
 
     /**
-     *  读取数据的线程
+     * 读取数据的线程
      */
     private Thread readThread;
-
-    /**
-     * 注册一个新的观察者，当连接打开时将触发该回调
-     *
-     * @param listener 要添加的观察者逻辑
-     */
-    public void addOpenEventListener(Consumer<Socket> listener) {
-        openEventListeners.add(listener);
-    }
-
-    /**
-     * 移除已注册“打开链接”的观察者
-     *
-     * @param listener 要移除的观察者实例
-     */
-    public void removeOpenEventListener(Consumer<Socket> listener) {
-        openEventListeners.remove(listener);
-    }
-
-    /**
-     * 触发所有已注册“打开链接”的观察者
-     *
-     * @param socket 刚刚开启的 Socket 实例
-     */
-    protected void triggerOpen(Socket socket) {
-        for (Consumer<Socket> listener : openEventListeners) {
-            listener.accept(socket);
-        }
-    }
-
-    /**
-     * 注册一个新的观察者，当链接关闭时将触发该回调
-     *
-     * @param listener 要添加的观察者逻辑
-     */
-    public void addCloseEventListener(Consumer<Socket> listener) {
-        closeEventListeners.add(listener);
-    }
-
-    /**
-     * 移除已注册“关闭链接”的观察者
-     *
-     * @param listener 要移除的观察者实例
-     */
-    public void removeCloseEventListener(Consumer<Socket> listener) {
-        closeEventListeners.remove(listener);
-    }
-
-    /**
-     * 触发所有已注册“关闭链接”的观察者
-     *
-     * @param socket 刚刚关闭的 Socket 实例
-     */
-    protected void triggerClose(Socket socket) {
-        for (Consumer<Socket> listener : closeEventListeners) {
-            listener.accept(socket);
-        }
-    }
-
-
-    /**
-     * 根据DeviceActionModel触发onReceiveEvent事件
-     *
-     * @param readBytes
-     * @param length
-     */
-    protected void onReceiveEvent(byte[] readBytes, int length) {
-        if (receiveEvent != null) {
-            receiveEvent.accept(readBytes, length);
-        }
-    }
 
     /**
      * 启动websocket
@@ -165,7 +78,7 @@ public class TcpClient {
         this.isOpen = true;
         // 通知所有观察者
         triggerOpen(this.clientSocket);
-        receiveMessage();
+        startReadThread();
     }
 
     /**
@@ -213,9 +126,9 @@ public class TcpClient {
      * @return
      * @throws IOException
      */
-    public int sendMessage(String message) throws IOException {
+    public int send(String message) throws IOException {
         byte[] sendBytes = message.getBytes(this.charset);
-        return sendMessage(sendBytes);
+        return send(sendBytes);
     }
 
     /**
@@ -225,7 +138,7 @@ public class TcpClient {
      * @return
      * @throws IOException
      */
-    public synchronized int  sendMessage(byte[] bytes) throws IOException {
+    public synchronized int send(byte[] bytes) throws IOException {
         if (!this.isOpen || clientSocket == null || !clientSocket.isConnected()) {
             return -1;
         }
@@ -236,9 +149,9 @@ public class TcpClient {
     }
 
     /**
-     * 接收消息
+     * 启动读取线程
      */
-    private void receiveMessage() {
+    private void startReadThread() {
         readThread = new Thread(() -> {
             try {
                 InputStream input = clientSocket.getInputStream();

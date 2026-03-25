@@ -1,6 +1,9 @@
 package device;
 
+import device.utils.HexUtils;
+
 import java.io.IOException;
+import java.util.HexFormat;
 import java.util.function.BiConsumer;
 
 public class DeviceBase {
@@ -28,8 +31,8 @@ public class DeviceBase {
         this.connect.close();
     }
 
-    public void writeByPriorityQueue(byte[] writeBytes, int priority, int retryCount, BiConsumer<byte[], byte[]> dataReceived) {
-        this.connect.write(writeBytes, priority, retryCount, dataReceived);
+    public void write(QueueStrategy queueStrategy, byte[] writeBytes, int priority, int retryCount, BiConsumer<byte[], byte[]> dataReceived) {
+        this.connect.write(queueStrategy, writeBytes, priority, retryCount, dataReceived);
     }
 
     /**
@@ -51,15 +54,16 @@ public class DeviceBase {
      * @param readBytes  读取到的设备数据
      * @param writeBytes 写入到设备的数据
      */
-    public void receive(byte[] readBytes, byte[] writeBytes[]) {
-
+    public void receive(byte[] readBytes, byte[] writeBytes) {
+        System.out.println(HexUtils.bytesToHexString(writeBytes));
+        System.out.println(HexUtils.bytesToHexString(readBytes));
     }
 
     /**
      * 队列执行完毕后执行
      */
     public void actionEndEvent() {
-
+        System.out.println("当前所有队列执行完毕");
     }
 
 }

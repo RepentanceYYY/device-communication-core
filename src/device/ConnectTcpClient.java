@@ -36,7 +36,7 @@ public class ConnectTcpClient extends ConnectBase {
 
     @Override
     public void write(DeviceActionModel deviceActionModel) throws IOException {
-        tcpClient.sendMessage(deviceActionModel.getWriteBytes());
+        tcpClient.send(deviceActionModel.getWriteBytes());
     }
 
     /**
