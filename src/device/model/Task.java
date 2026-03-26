@@ -1,14 +1,12 @@
-package device;
+package device.model;
+
+import device.enums.CommMode;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 
-public class DeviceActionModel implements Comparable<DeviceActionModel> {
-    public DeviceActionModel() {
-
-    }
-
-    public DeviceActionModel(byte[] writeBytes,int retryCount, int priority, BiConsumer<byte[], byte[]> dataReceived) {
+public class Task implements Comparable<Task> {
+    public Task(byte[] writeBytes, int retryCount, int priority, BiConsumer<byte[], byte[]> dataReceived) {
         this.writeBytes = writeBytes;
         this.dataReceived = dataReceived;
         this.retryCount = retryCount;
@@ -33,6 +31,7 @@ public class DeviceActionModel implements Comparable<DeviceActionModel> {
      * 优先级
      */
     private int priority;
+    private CommMode commMode = CommMode.WAIT_RESPONSE;
     /**
      * 序列生成器
      */
@@ -43,7 +42,7 @@ public class DeviceActionModel implements Comparable<DeviceActionModel> {
     private final long sequence = seqGenerator.getAndIncrement();
 
     @Override
-    public int compareTo(DeviceActionModel other) {
+    public int compareTo(Task other) {
         // 1. 首先比较优先级 (数值越小越优先)
         int res = Integer.compare(this.priority, other.priority);
 
@@ -76,5 +75,13 @@ public class DeviceActionModel implements Comparable<DeviceActionModel> {
 
     public void setRetryCount(int retryCount) {
         this.retryCount = retryCount;
+    }
+
+    public CommMode getActionStrategy() {
+        return commMode;
+    }
+
+    public void setActionStrategy(CommMode commMode) {
+        this.commMode = commMode;
     }
 }

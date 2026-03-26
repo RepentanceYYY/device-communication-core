@@ -1,6 +1,6 @@
-package device;
+package device.channel;
 
-import device.utils.ClientBase;
+import device.channel.CommChannel;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,12 +9,15 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Arrays;
 
-public class TcpClient extends ClientBase<Socket> {
+/**
+ * 基于 TCP 协议的具体通道
+ */
+public class TcpChannel extends CommChannel<Socket> {
     /**
      * @param host 主机名
      * @param port 端口号
      */
-    public TcpClient(String host, int port) {
+    public TcpChannel(String host, int port) {
         this.address = new InetSocketAddress(host, port);
     }
 

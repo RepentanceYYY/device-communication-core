@@ -52,4 +52,21 @@ public final class CheckSumUtils {
         byte lrc = (byte) (((sum & 0xFF) ^ 0xFF) + 1);
         return HEX_FORMAT.formatHex(new byte[]{lrc});
     }
+
+    /**
+     * 计算BCC校验码（异或校验）
+     * * @param data 需要校验的字节数组
+     *
+     * @return 校验码 (byte)
+     */
+    public static byte getBCC(byte[] data) {
+        byte bcc = 0;
+
+        // 依次对每一个字节进行异或运算
+        for (byte b : data) {
+            bcc ^= b;
+        }
+
+        return bcc;
+    }
 }

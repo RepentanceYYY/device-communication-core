@@ -1,10 +1,15 @@
-package device;
+package device.channel;
 
 import com.fazecast.jSerialComm.SerialPort;
-import device.utils.ClientBase;
+import device.channel.CommChannel;
 
-public class SerialClient extends ClientBase<SerialPort> {
-    public SerialClient(String portName, int baudRate) {
+import java.io.IOException;
+
+/**
+ * 基于串口的具体通道
+ */
+public class SerialChannel extends CommChannel<SerialPort> {
+    public SerialChannel(String portName, int baudRate) {
         this.portName = portName;
         this.baudRate = baudRate;
     }
@@ -13,6 +18,11 @@ public class SerialClient extends ClientBase<SerialPort> {
      * 串口名
      */
     private String portName;
+
+    public String getPortName() {
+        return portName;
+    }
+
     /**
      * 波特率
      */
@@ -39,7 +49,7 @@ public class SerialClient extends ClientBase<SerialPort> {
         return isOpen && serialPort != null && serialPort.isOpen();
     }
 
-    public void start() throws Exception {
+    public void open() throws IOException {
         if (isOpen) return;
 
         serialPort = SerialPort.getCommPort(portName);
@@ -51,7 +61,7 @@ public class SerialClient extends ClientBase<SerialPort> {
             this.isOpen = true;
             startReadThread();
         } else {
-            throw new Exception("无法打开串口: " + portName);
+            throw new IOException("无法打开串口: " + portName);
         }
     }
 
@@ -61,7 +71,6 @@ public class SerialClient extends ClientBase<SerialPort> {
                 try {
                     int available = serialPort.bytesAvailable();
                     if (available > 0) {
-                        // --- 模仿 C# 的静默检测逻辑 ---
                         int lastSize;
                         do {
                             lastSize = available;

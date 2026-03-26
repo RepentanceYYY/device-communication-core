@@ -1,14 +1,17 @@
-package device.utils;
+package device.channel;
 
-import java.net.Socket;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-public class ClientBase<T> {
-    public ClientBase() {
+/**
+ * 通讯通道基类
+ * T 代表底层资源类型，如 Socket 或 SerialPort
+ */
+public class CommChannel<T> {
+    public CommChannel() {
         this.charset = Charset.forName("GB2312");
     }
 
@@ -17,7 +20,7 @@ public class ClientBase<T> {
      */
     public Charset charset;
     /**
-     * 设备回发消息时触发
+     * 通道回发消息时触发
      */
     public BiConsumer<byte[], Integer> receiveEvent;
 
@@ -92,7 +95,7 @@ public class ClientBase<T> {
     }
 
     /**
-     * 触发设备回发消息事件
+     * 触发通道回发消息事件
      *
      * @param readBytes
      * @param length

@@ -1,9 +1,9 @@
-package device;
+package device.enums;
 
 /**
  * 队列策略
  */
-public enum QueueStrategy {
+public enum DispatchMode {
     /**
      * 高优先级策略：插队执行
      * 内部对应 PriorityQueue
