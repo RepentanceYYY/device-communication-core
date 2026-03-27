@@ -1,45 +1,45 @@
 package device.core;
 
-import device.channel.TcpChannel;
+import device.channel.TcpClientChannel;
 import device.model.Task;
 
 import java.io.IOException;
 import java.util.Arrays;
 
-public class TcpDispatcher extends CommDispatcher {
-    public TcpDispatcher(TcpChannel tcpChannel) {
-        this.tcpChannel = tcpChannel;
-        this.tcpChannel.receiveEvent = this::channelReceiveEvent;
+public class TcpClientDispatcher extends CommDispatcher {
+    public TcpClientDispatcher(TcpClientChannel tcpClientChannel) {
+        this.tcpClientChannel = tcpClientChannel;
+        this.tcpClientChannel.receiveEvent = this::channelReceiveEvent;
     }
 
     /**
      * Tcp客户端
      */
-    private TcpChannel tcpChannel;
+    private TcpClientChannel tcpClientChannel;
 
     @Override
     public String getName() {
-        return this.tcpChannel.address.toString();
+        return this.tcpClientChannel.address.toString();
     }
 
     @Override
     public boolean isOpen() {
-        return tcpChannel.getIsOpen();
+        return tcpClientChannel.getIsOpen();
     }
 
     @Override
     public void open() throws IOException {
-        tcpChannel.start(3);
+        tcpClientChannel.start(3);
     }
 
     @Override
     public void close() throws IOException {
-        tcpChannel.close();
+        tcpClientChannel.close();
     }
 
     @Override
     public void write(Task task) throws IOException {
-        tcpChannel.send(task.getWriteBytes());
+        tcpClientChannel.send(task.getWriteBytes());
     }
 
     /**

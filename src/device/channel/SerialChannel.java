@@ -44,7 +44,7 @@ public class SerialChannel extends CommChannel<SerialPort> {
      * 串口
      */
     private SerialPort serialPort;
-
+    @Override
     public boolean getIsOpen() {
         return isOpen && serialPort != null && serialPort.isOpen();
     }

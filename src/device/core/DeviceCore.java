@@ -102,6 +102,10 @@ public class DeviceCore {
         System.out.println(HexUtils.bytesToHexString(writeBytes));
         System.out.println(HexUtils.bytesToHexString(readBytes));
     }
+    protected void callback(byte[] readBytes, byte[] writeBytes) {
+        System.out.println("send-->" + HexUtils.bytesToHexString(writeBytes));
+        System.out.println("receive-->" + HexUtils.bytesToHexString(readBytes));
+    }
 
     /**
      * 队列执行完毕后执行

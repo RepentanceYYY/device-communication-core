@@ -1,21 +1,25 @@
+import device.FingerprintDevice;
 import device.RFIDCabinetDevice;
+import device.channel.ChannelFactory;
 import device.channel.SerialChannel;
 import device.core.SerialDispatcher;
-import device.core.TcpDispatcher;
-import device.HLDevice;
-import device.channel.TcpChannel;
+import device.enums.ChannelType;
+import device.model.ChannelConfig;
 
 import java.io.IOException;
-import java.util.List;
 
 public class Main {
     public static void main(String[] args) throws IOException {
-        RFIDCabinetDevice rfidCabinetDevice = new RFIDCabinetDevice();
-        SerialDispatcher serialDispatcher = new SerialDispatcher(new SerialChannel("COM7", 57600));
-        rfidCabinetDevice.setCommDispatcher(serialDispatcher);
-        serialDispatcher.setDeviceBase(rfidCabinetDevice);
-        rfidCabinetDevice.open();
-        List<String> epcListSync = rfidCabinetDevice.getEpcListSync(5);
+        FingerprintDevice fingerprintDevice = new FingerprintDevice();
+        ChannelConfig config = new ChannelConfig();
+        config.setType(ChannelType.SERIAL);
+        config.setPortName("COM4");
+        config.setBaudRate(57600);
+
+        SerialDispatcher serialDispatcher = new SerialDispatcher((SerialChannel) ChannelFactory.create(config));
+        fingerprintDevice.setCommDispatcher(serialDispatcher);
+        serialDispatcher.setDeviceBase(fingerprintDevice);
+        fingerprintDevice.readIndexTable();
         System.out.println("主线程执行完毕");
     }
 }

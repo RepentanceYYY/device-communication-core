@@ -154,7 +154,7 @@ public class RFIDCabinetDevice extends DeviceCore implements IFrameProtocol {
             return readBytes[0] == 0x6A && readBytes[1] == 0x6B;
         }
         // 所有的回复都是AA 9A开头，index=2的是指令类型
-        if (!(readBytes[0] == (byte) 0xAA && readBytes[1] == (byte) 0x9A && readBytes[2] == writeBytes[2])) {
+        if (!(readBytes[0] == (byte) 0xAA && readBytes[1] == (byte) 0x9A && readBytes[2] == writeBytes[2]) && readBytes[3] == writeBytes[3]) {
             return false;
         }
 

@@ -1,5 +1,6 @@
 package device.channel;
 
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,9 +11,29 @@ import java.util.function.Consumer;
  * 通讯通道基类
  * T 代表底层资源类型，如 Socket 或 SerialPort
  */
-public class CommChannel<T> {
+public abstract class CommChannel<T> {
     public CommChannel() {
         this.charset = Charset.forName("GB2312");
+    }
+
+    public abstract boolean getIsOpen();
+
+    public abstract void open() throws IOException;
+
+    public abstract void close() throws IOException;
+
+    public abstract void send(byte[] data) throws IOException;
+
+    /**
+     * 发送消息
+     *
+     * @param message
+     * @return
+     * @throws IOException
+     */
+    public void send(String message) throws IOException {
+        byte[] sendBytes = message.getBytes(this.charset);
+        this.send(sendBytes);
     }
 
     /**

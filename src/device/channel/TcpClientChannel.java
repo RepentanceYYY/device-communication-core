@@ -1,7 +1,5 @@
 package device.channel;
 
-import device.channel.CommChannel;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -12,12 +10,12 @@ import java.util.Arrays;
 /**
  * 基于 TCP 协议的具体通道
  */
-public class TcpChannel extends CommChannel<Socket> {
+public class TcpClientChannel extends CommChannel<Socket> {
     /**
      * @param host 主机名
      * @param port 端口号
      */
-    public TcpChannel(String host, int port) {
+    public TcpClientChannel(String host, int port) {
         this.address = new InetSocketAddress(host, port);
     }
 
@@ -46,14 +44,15 @@ public class TcpChannel extends CommChannel<Socket> {
     private Thread readThread;
 
     /**
-     * 启动websocket
+     * 打开tcp websocket
      */
-    public void start() throws IOException {
+    @Override
+    public void open() throws IOException {
         this.start(-1);
     }
 
     /**
-     * 启动websocket
+     * 启动tcp websocket
      *
      * @param maxTryCount 最大尝试次数
      */
@@ -89,6 +88,7 @@ public class TcpChannel extends CommChannel<Socket> {
      *
      * @throws IOException
      */
+    @Override
     public void close() throws IOException {
         if (!this.isOpen) {
             return;
@@ -129,9 +129,9 @@ public class TcpChannel extends CommChannel<Socket> {
      * @return
      * @throws IOException
      */
-    public int send(String message) throws IOException {
+    public void send(String message) throws IOException {
         byte[] sendBytes = message.getBytes(this.charset);
-        return send(sendBytes);
+        this.send(sendBytes);
     }
 
     /**
@@ -141,14 +141,14 @@ public class TcpChannel extends CommChannel<Socket> {
      * @return
      * @throws IOException
      */
-    public synchronized int send(byte[] bytes) throws IOException {
+    @Override
+    public synchronized void send(byte[] bytes) throws IOException {
         if (!this.isOpen || clientSocket == null || !clientSocket.isConnected()) {
-            return -1;
+            return;
         }
         OutputStream out = clientSocket.getOutputStream();
         out.write(bytes);
         out.flush();
-        return bytes.length;
     }
 
     /**
