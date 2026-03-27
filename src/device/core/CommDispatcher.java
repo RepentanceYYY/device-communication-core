@@ -166,6 +166,9 @@ public abstract class CommDispatcher {
         executor.submit(this::processNextTask);
     }
 
+    /**
+     * 处理下一个任务
+     */
     private void processNextTask() {
         Task task;
 

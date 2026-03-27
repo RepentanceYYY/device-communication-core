@@ -6,7 +6,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 
 public class Task implements Comparable<Task> {
-    public Task(byte[] writeBytes, int retryCount, int priority, BiConsumer<byte[], byte[]> dataReceived) {
+    /**
+     *
+     * @param writeBytes 写入的数据
+     * @param priority 优先级
+     * @param retryCount 重试次数
+     * @param dataReceived 回调函数
+     */
+    public Task(byte[] writeBytes, int priority, int retryCount, BiConsumer<byte[], byte[]> dataReceived) {
         this.writeBytes = writeBytes;
         this.dataReceived = dataReceived;
         this.retryCount = retryCount;

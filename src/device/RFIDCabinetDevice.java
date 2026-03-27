@@ -6,7 +6,6 @@ import device.core.IFrameProtocol;
 import device.enums.DispatchMode;
 import device.utils.HexUtils;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;

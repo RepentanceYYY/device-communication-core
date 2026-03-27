@@ -46,15 +46,26 @@ public class DeviceCore {
     /**
      * 写入数据
      *
-     * @param dispatchMode
-     * @param writeBytes
-     * @param priority
-     * @param retryCount
-     * @param dataReceived
+     * @param dispatchMode 调度策略
+     * @param writeBytes   写入数据
+     * @param priority     优先级
+     * @param retryCount   重试次数
+     * @param dataReceived 接收到响应的回调
      */
     public void write(DispatchMode dispatchMode, byte[] writeBytes, int priority, int retryCount, BiConsumer<byte[], byte[]> dataReceived) {
         this.commDispatcher.write(dispatchMode, writeBytes, priority, retryCount, dataReceived);
     }
+
+    /**
+     * 写入数据
+     * 优先级为10，重试0次
+     * @param writeBytes
+     * @param dataReceived 接收到响应的回调
+     */
+    public void write(byte[] writeBytes, BiConsumer<byte[], byte[]> dataReceived) {
+        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, dataReceived);
+    }
+
 
     /**
      * 基础校验
@@ -71,8 +82,9 @@ public class DeviceCore {
 
     /**
      * 强校验
+     *
      * @param writeBytes 写入
-     * @param readBytes 读取
+     * @param readBytes  读取
      * @return
      */
     public boolean isMatch(byte[] writeBytes, byte[] readBytes) {
