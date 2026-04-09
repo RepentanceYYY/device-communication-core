@@ -28,8 +28,10 @@ public class TcpServerChannel extends CommChannel<ServerSocket, Socket> {
      */
     private int fixedClientPort;
 
-    // 保存所有已连接的客户端
+    // 保存所有已连接的客户端(多客户端模块)
     private final CopyOnWriteArrayList<Socket> clients = new CopyOnWriteArrayList<>();
+    // 单客户端
+    private volatile Socket fixedClient;
 
     // 客户端连接/断开事件
     private final List<Consumer<Socket>> clientOpenListeners = new CopyOnWriteArrayList<>();
@@ -41,6 +43,17 @@ public class TcpServerChannel extends CommChannel<ServerSocket, Socket> {
 
     public TcpServerChannel(int port, String clientIp, int clientPort) {
         this.port = port;
+        this.fixedClientIp = clientIp;
+        this.fixedClientPort = clientPort;
+    }
+
+    /**
+     * 设置固定的客户端
+     *
+     * @param clientIp
+     * @param clientPort
+     */
+    public void setFixedClient(String clientIp, int clientPort) {
         this.fixedClientIp = clientIp;
         this.fixedClientPort = clientPort;
     }
@@ -103,13 +116,46 @@ public class TcpServerChannel extends CommChannel<ServerSocket, Socket> {
     }
 
     /**
+     * 发送给固定客户端
+     *
+     * @param data
+     * @throws IOException
+     */
+    public void sendToFixed(byte[] data) throws IOException {
+        if (fixedClient != null && !fixedClient.isClosed()) {
+            send(fixedClient, data);
+        } else {
+            throw new IOException("固定客户端未连接");
+        }
+    }
+
+    /**
      * 发送给单个客户端
+     *
+     * @param client 客户端
+     * @param data
+     * @throws IOException
      */
     public void send(Socket client, byte[] data) throws IOException {
         if (client == null || client.isClosed()) return;
         OutputStream out = client.getOutputStream();
         out.write(data);
         out.flush();
+    }
+
+    /**
+     * 发送给指定客户端
+     *
+     * @param ip
+     * @param data
+     * @throws IOException
+     */
+    public void sendTo(String ip, byte[] data) throws IOException {
+        for (Socket client : clients) {
+            if (client.getInetAddress().getHostAddress().equals(ip)) {
+                send(client, data);
+            }
+        }
     }
 
     /**
@@ -179,6 +225,23 @@ public class TcpServerChannel extends CommChannel<ServerSocket, Socket> {
 
                         clients.remove(oldClient);
                     }
+                    // 加入新客户端
+                    clients.add(client);
+
+                    if (fixedClientIp != null && ip.equals(fixedClientIp)) {
+
+                        // 替换旧 fixedClient
+                        if (fixedClient != null && fixedClient != client && !fixedClient.isClosed()) {
+                            try {
+                                fixedClient.close();
+                            } catch (IOException ignored) {
+                            }
+                            clients.remove(fixedClient);
+                        }
+
+                        fixedClient = client;
+                    }
+
                     triggerClientOpen(client); // 客户端连接事件
                     startReadThread(client);
                 } catch (IOException e) {
@@ -209,6 +272,9 @@ public class TcpServerChannel extends CommChannel<ServerSocket, Socket> {
             } finally {
                 try {
                     clients.remove(client);
+                    if (client == fixedClient) {
+                        fixedClient = null;
+                    }
                     client.close();
                     triggerClientClose(client); // 客户端断开事件
                 } catch (IOException ignored) {

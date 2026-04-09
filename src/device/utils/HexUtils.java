@@ -5,6 +5,8 @@ import java.util.HexFormat;
 public class HexUtils {
     private static final HexFormat FORMATTER = HexFormat.ofDelimiter(" ").withUpperCase();
 
+    private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+
     /**
      * 将 16 进制字符串（空格分隔）转回 byte 数组
      *
@@ -34,5 +36,18 @@ public class HexUtils {
             return "";
         }
         return FORMATTER.formatHex(bytes);
+    }
+
+    /**
+     * 将10进制数转成字符串格式的16进制数
+     * @param value
+     * @return
+     */
+    public static String toHexByteFast(int value) {
+        int v = value & 0xFF;
+        char[] chars = new char[2];
+        chars[0] = HEX_ARRAY[v >>> 4];
+        chars[1] = HEX_ARRAY[v & 0x0F];
+        return new String(chars);
     }
 }

@@ -113,6 +113,11 @@ public class DeviceCore {
         System.out.println(HexUtils.bytesToHexString(readBytes));
     }
 
+    /**
+     * 可作为默认回调
+     * @param readBytes
+     * @param writeBytes
+     */
     protected void callback(byte[] readBytes, byte[] writeBytes) {
         System.out.println("send-->" + HexUtils.bytesToHexString(writeBytes));
         System.out.println("receive-->" + HexUtils.bytesToHexString(readBytes));
