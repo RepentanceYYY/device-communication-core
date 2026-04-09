@@ -1,5 +1,6 @@
 package device.core;
 
+import com.fazecast.jSerialComm.SerialPort;
 import device.channel.SerialChannel;
 import device.model.Task;
 
@@ -45,7 +46,7 @@ public class SerialDispatcher extends CommDispatcher {
      * @param readBytes
      * @param length
      */
-    private void channelReceiveEvent(byte[] readBytes, int length) {
+    private void channelReceiveEvent(SerialPort source, byte[] readBytes, int length) {
         byte[] data = Arrays.copyOf(readBytes, length);
         receive(data);
     }

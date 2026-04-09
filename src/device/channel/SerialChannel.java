@@ -8,7 +8,7 @@ import java.io.IOException;
 /**
  * 基于串口的具体通道
  */
-public class SerialChannel extends CommChannel<SerialPort> {
+public class SerialChannel extends CommChannel<SerialPort,SerialPort> {
     public SerialChannel(String portName, int baudRate) {
         this.portName = portName;
         this.baudRate = baudRate;
@@ -81,7 +81,7 @@ public class SerialChannel extends CommChannel<SerialPort> {
                         // 数据稳定了，一次性读取
                         byte[] readBuffer = new byte[available];
                         int numRead = serialPort.readBytes(readBuffer, readBuffer.length);
-                        onReceiveEvent(readBuffer, numRead);
+                        onReceiveEvent(serialPort,readBuffer, numRead);
                     } else {
                         Thread.sleep(50); // 没数据时降低 CPU 占用
                     }

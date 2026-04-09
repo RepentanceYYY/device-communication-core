@@ -8,9 +8,9 @@ import java.net.Socket;
 import java.util.Arrays;
 
 /**
- * 基于 TCP 协议的具体通道
+ * 基于 TCP 协议的客户端通道
  */
-public class TcpClientChannel extends CommChannel<Socket> {
+public class TcpClientChannel extends CommChannel<Socket,Socket> {
     /**
      * @param host 主机名
      * @param port 端口号
@@ -168,7 +168,7 @@ public class TcpClientChannel extends CommChannel<Socket> {
                     if (len == -1) break;
                     // 复制并处理数据
                     byte[] data = Arrays.copyOf(buffer, len);
-                    onReceiveEvent(data, len);
+                    onReceiveEvent(clientSocket,data, len);
                 }
             } catch (IOException e) {
                 if (isOpen) {

@@ -59,11 +59,21 @@ public class DeviceCore {
     /**
      * 写入数据
      * 优先级为10，重试0次
+     *
      * @param writeBytes
      * @param dataReceived 接收到响应的回调
      */
     public void write(byte[] writeBytes, BiConsumer<byte[], byte[]> dataReceived) {
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, dataReceived);
+    }
+
+    /**
+     * 写入数据
+     * 优先级为10，重试0次，无回调
+     * @param writeBytes
+     */
+    public void write(byte[] writeBytes) {
+        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, this::callback);
     }
 
 
@@ -102,6 +112,7 @@ public class DeviceCore {
         System.out.println(HexUtils.bytesToHexString(writeBytes));
         System.out.println(HexUtils.bytesToHexString(readBytes));
     }
+
     protected void callback(byte[] readBytes, byte[] writeBytes) {
         System.out.println("send-->" + HexUtils.bytesToHexString(writeBytes));
         System.out.println("receive-->" + HexUtils.bytesToHexString(readBytes));
