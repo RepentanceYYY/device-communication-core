@@ -6,6 +6,7 @@ import device.model.Task;
 import device.utils.HexUtils;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -97,6 +98,12 @@ public abstract class CommDispatcher {
     protected DeviceCore device;
 
     /**
+     * 获取当前编码格式
+     * @return
+     */
+    public abstract Charset getCharset();
+
+    /**
      * 设置设备
      *
      * @param device
@@ -128,7 +135,19 @@ public abstract class CommDispatcher {
      * @param retryCount 重试次数
      */
     public void write(byte[] writeBytes, int priority, int retryCount) {
+        this.enqueueAction(DispatchMode.SEQUENTIAL,writeBytes,priority,retryCount,null);
+    }
 
+    /**
+     * 写入数据
+     *
+     * @param writeBytes 写入的数据
+     * @param priority   优先级
+     * @param retryCount 重试次数
+     * @param timeout 响应超时时间
+     */
+    public void write(byte[] writeBytes, int priority, int retryCount,long timeout) {
+        this.enqueueAction(DispatchMode.SEQUENTIAL,writeBytes,priority,retryCount,timeout,null);
     }
 
     /**
@@ -145,6 +164,20 @@ public abstract class CommDispatcher {
     }
 
     /**
+     * 写入数据
+     *
+     * @param strategy     队列策略
+     * @param writeBytes   写入的数据
+     * @param priority     优先级
+     * @param retryCount   重试次数
+     * @param timeout 响应超时时间
+     * @param dataReceived 响应回调
+     */
+    public void write(DispatchMode strategy, byte[] writeBytes, int priority, int retryCount,long timeout, BiConsumer<byte[], byte[]> dataReceived) {
+        this.enqueueAction(strategy, writeBytes, priority, retryCount,timeout, dataReceived);
+    }
+
+    /**
      * 入队操作
      *
      * @param strategy
@@ -158,6 +191,29 @@ public abstract class CommDispatcher {
         if (writeBytes == null || writeBytes.length < 1) return;
 
         Task task = new Task(writeBytes, priority, retryCount, dataReceived);
+
+        switch (strategy) {
+            case PRIORITY -> this.priorityQueue.offer(task);
+            case SEQUENTIAL -> this.concurrentLinkedQueue.offer(task);
+        }
+        executor.submit(this::processNextTask);
+    }
+
+    /**
+     * 入队操作
+     *
+     * @param strategy
+     * @param writeBytes
+     * @param priority
+     * @param retryCount
+     * @param timeout
+     * @param dataReceived
+     */
+    protected void enqueueAction(DispatchMode strategy, byte[] writeBytes, int priority, int retryCount,long timeout, BiConsumer<byte[], byte[]> dataReceived) {
+
+        if (writeBytes == null || writeBytes.length < 1) return;
+
+        Task task = new Task(writeBytes, priority, retryCount,timeout, dataReceived);
 
         switch (strategy) {
             case PRIORITY -> this.priorityQueue.offer(task);
@@ -197,12 +253,13 @@ public abstract class CommDispatcher {
                             continue;
                         }
                     }
+                    Thread.sleep(device.getWriteIntervalTime());
                     System.out.println("即将写入:"+ HexUtils.bytesToHexString(this.currentTask.getWriteBytes()));
                     write(task);
 
                     if (strategy == CommMode.WAIT_RESPONSE) {
                         // 等待响应
-                        success = responseCondition.await(responseTimeout, TimeUnit.MILLISECONDS);
+                        success = responseCondition.await(task.getTimeout(), TimeUnit.MILLISECONDS);
                         if (success) {
                             responseData = this.lastReadBytes;
                             break; // 成功则跳出重试循环
@@ -262,7 +319,6 @@ public abstract class CommDispatcher {
     public void receive(byte[] readBytes) {
         // 基础校验
         if (device == null || !device.validate(readBytes)) return;
-
         // 认领逻辑
         if (lock.tryLock()) {
             try {

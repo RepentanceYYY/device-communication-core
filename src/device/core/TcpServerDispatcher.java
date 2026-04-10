@@ -5,6 +5,7 @@ import device.model.Task;
 
 import java.io.IOException;
 import java.net.Socket;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 
 /**
@@ -41,6 +42,11 @@ public class TcpServerDispatcher extends CommDispatcher {
     @Override
     public void write(Task task) throws IOException {
         this.tcpServerChannel.send(task.getWriteBytes());
+    }
+
+    @Override
+    public Charset getCharset() {
+        return this.tcpServerChannel.charset;
     }
 
     /**

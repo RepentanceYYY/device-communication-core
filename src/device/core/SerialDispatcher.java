@@ -5,6 +5,7 @@ import device.channel.SerialChannel;
 import device.model.Task;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 
 public class SerialDispatcher extends CommDispatcher {
@@ -38,6 +39,11 @@ public class SerialDispatcher extends CommDispatcher {
     @Override
     public void write(Task task) throws IOException {
         this.serialChannel.send(task.getWriteBytes());
+    }
+
+    @Override
+    public Charset getCharset() {
+        return this.serialChannel.charset;
     }
 
     /**

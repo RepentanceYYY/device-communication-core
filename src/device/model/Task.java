@@ -8,10 +8,9 @@ import java.util.function.Function;
 
 public class Task implements Comparable<Task> {
     /**
-     *
-     * @param writeBytes 写入的数据
-     * @param priority 优先级
-     * @param retryCount 重试次数
+     * @param writeBytes   写入的数据
+     * @param priority     优先级
+     * @param retryCount   重试次数
      * @param dataReceived 回调函数
      */
     public Task(byte[] writeBytes, int priority, int retryCount, BiConsumer<byte[], byte[]> dataReceived) {
@@ -19,6 +18,21 @@ public class Task implements Comparable<Task> {
         this.dataReceived = dataReceived;
         this.retryCount = retryCount;
         this.priority = priority;
+    }
+
+    /**
+     * @param writeBytes   写入的数据
+     * @param priority     优先级
+     * @param retryCount   重试次数
+     * @param timeout      响应超时时间
+     * @param dataReceived 回调函数
+     */
+    public Task(byte[] writeBytes, int priority, int retryCount, long timeout, BiConsumer<byte[], byte[]> dataReceived) {
+        this.writeBytes = writeBytes;
+        this.priority = priority;
+        this.retryCount = retryCount;
+        this.timeout = timeout;
+        this.dataReceived = dataReceived;
     }
 
     /**
@@ -31,6 +45,11 @@ public class Task implements Comparable<Task> {
      * 参数2：写入的数据
      */
     private BiConsumer<byte[], byte[]> dataReceived;
+
+    /**
+     * 响应超时时间
+     */
+    private long timeout = 500;
     /**
      * 重试次数
      */
@@ -39,6 +58,9 @@ public class Task implements Comparable<Task> {
      * 优先级
      */
     private int priority;
+    /**
+     * 指令模式
+     */
     private CommMode commMode = CommMode.WAIT_RESPONSE;
     /**
      * 序列生成器
@@ -67,6 +89,10 @@ public class Task implements Comparable<Task> {
 
     public BiConsumer<byte[], byte[]> getDataReceived() {
         return dataReceived;
+    }
+
+    public long getTimeout() {
+        return timeout;
     }
 
     public int getRetryCount() {

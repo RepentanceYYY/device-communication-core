@@ -13,6 +13,18 @@ public class DeviceCore {
      * 通信调度器
      */
     private CommDispatcher commDispatcher;
+    /**
+     * 写入间隔时间
+     */
+    private volatile long writeIntervalTime = 0L;
+
+    public long getWriteIntervalTime() {
+        return writeIntervalTime;
+    }
+
+    public void setWriteIntervalTime(long writeIntervalTime) {
+        this.writeIntervalTime = writeIntervalTime;
+    }
 
     public void setCommDispatcher(CommDispatcher commDispatcher) {
         this.commDispatcher = commDispatcher;
@@ -70,10 +82,43 @@ public class DeviceCore {
     /**
      * 写入数据
      * 优先级为10，重试0次，无回调
+     *
      * @param writeBytes
      */
     public void write(byte[] writeBytes) {
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, this::callback);
+    }
+
+    /**
+     * 写入数据
+     * 优先级为10，重试0次，无回调
+     *
+     * @param writeBytes
+     * @param timeout
+     */
+    public void write(byte[] writeBytes, long timeout) {
+        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, timeout, this::callback);
+    }
+
+    /**
+     * 写入数据
+     *
+     * @param writeASCII
+     */
+    public void write(String writeASCII) {
+        System.out.println("写入ASCII:" + writeASCII);
+        byte[] bytes = writeASCII.getBytes(this.commDispatcher.getCharset());
+        this.write(bytes);
+    }
+
+    public void write(String writeASCII, long timeout) {
+        byte[] bytes = writeASCII.getBytes(this.commDispatcher.getCharset());
+        this.write(bytes, timeout);
+    }
+
+    public void write(String writeASCII, int retryCount, long timeout) {
+        byte[] writeBytes = writeASCII.getBytes(this.commDispatcher.getCharset());
+        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, retryCount, timeout, this::callback);
     }
 
 
@@ -115,6 +160,7 @@ public class DeviceCore {
 
     /**
      * 可作为默认回调
+     *
      * @param readBytes
      * @param writeBytes
      */

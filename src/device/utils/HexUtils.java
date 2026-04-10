@@ -50,4 +50,13 @@ public class HexUtils {
         chars[1] = HEX_ARRAY[v & 0x0F];
         return new String(chars);
     }
+
+    /**
+     * 将16进制树转成字符串格式
+     * @param b
+     * @return
+     */
+    public static String byteToHex(byte b) {
+        return String.format("%02X", b);
+    }
 }
