@@ -4,6 +4,7 @@ import device.enums.DispatchMode;
 import device.utils.HexUtils;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.function.BiConsumer;
 
 public class DeviceCore {
@@ -31,6 +32,9 @@ public class DeviceCore {
         if (this.commDispatcher != null) {
             this.commDispatcher.onAllTasksCompleted = this::onAllTasksCompleted;
         }
+    }
+    public Charset getCharset(){
+        return this.commDispatcher.getCharset();
     }
 
     public void setTimeout(int timeout) {

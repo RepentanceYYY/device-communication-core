@@ -24,4 +24,37 @@ public class ByteUtils {
         System.arraycopy(array, start, result, 0, length);
         return result;
     }
+
+    /**
+     *  合并byte数组
+     * @param arrays
+     * @return
+     */
+    public static byte[] merge(byte[]... arrays) {
+        if (arrays == null || arrays.length == 0) {
+            return new byte[0];
+        }
+
+        int totalLength = 0;
+        // 计算总长度
+        for (byte[] arr : arrays) {
+            if (arr != null) {
+                totalLength += arr.length;
+            }
+        }
+
+        byte[] result = new byte[totalLength];
+
+        int offset = 0;
+        // 拷贝
+        for (byte[] arr : arrays) {
+            if (arr != null) {
+                int len = arr.length;
+                System.arraycopy(arr, 0, result, offset, len);
+                offset += len;
+            }
+        }
+
+        return result;
+    }
 }

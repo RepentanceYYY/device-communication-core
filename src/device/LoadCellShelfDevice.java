@@ -20,6 +20,9 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
         super.setCommDispatcher(comm);
         comm.responseTimeout = 1500;
     }
+    private final String frameHeader = "F8 96 AC 17 ";
+    private final String sendStatusCode = " 00 ";
+    private final String frameTail = " 0D 0A";
 
     /**
      * 批量读取数量
@@ -45,7 +48,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
             int low = data[i] & 0xFF;
             int high = data[i + 1] & 0xFF;
 
-            int count = (high << 8) | low;   // 小端合并
+            int count = (high << 8) | low;
 
             int status = data[i + 2] & 0xFF;
 
@@ -128,7 +131,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
     }
 
     /**
-     * 停用启用
+     * 停用启用货位
      *
      * @param addressHex 字符串格式Hex地址
      * @param enabled    true=启用；false=停用
@@ -141,6 +144,18 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
         this.switchModel(1);
     }
 
+    /**
+     * 停用启用所有货位
+     *
+     * @param enabled true=启用；false=停用
+     */
+    public void setAllEnabled(Boolean enabled) {
+        String enabledHex = enabled ? "01" : "00";
+        String ascii = "work 01"+enabledHex;
+        byte[] dataPackage = HexUtils.hexToBytes(ascii);
+
+    }
+
 
     @Override
     public boolean validate(byte[] readBytes) {
@@ -148,8 +163,6 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
             return false;
         }
         return true;
-
-//        return true;
     }
 
     @Override
@@ -207,6 +220,54 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
         } catch (Exception ex) {
             return false;
         }
+    }
+
+    /**
+     * 构建完整帧
+     * @param cmdCodeHex
+     * @param asciiData
+     * @return
+     */
+    private byte[] buildIntactFrame(String cmdCodeHex,String asciiData){
+        byte[] dataPackage = asciiData.getBytes(super.getCharset());
+
+        return null;
+    }
+
+    /**
+     * 构建中继模式下完整帧
+     * @param cmdCodeByte
+     * @param dataPackage
+     * @return
+     */
+    private byte[] buildRelayFrame(byte cmdCodeByte, byte[] dataPackage) {
+
+        int dataLen = (dataPackage == null) ? 0 : dataPackage.length;
+        // 总长度
+        byte[] frame = new byte[4 + 1 + 1 + 1 + dataLen + 2];
+
+        int i = 0;
+        // header
+        frame[i++] = (byte) 0xF8;
+        frame[i++] = (byte) 0x96;
+        frame[i++] = (byte) 0xAC;
+        frame[i++] = (byte) 0x17;
+        // cmd
+        frame[i++] = cmdCodeByte;
+        // status
+        frame[i++] = 0x00;
+        // length
+        frame[i++] = (byte) dataLen;
+        // data
+        if (dataLen > 0) {
+            System.arraycopy(dataPackage, 0, frame, i, dataLen);
+            i += dataLen;
+        }
+        // tail
+        frame[i++] = 0x0D;
+        frame[i] = 0x0A;
+
+        return frame;
     }
 
     @Override
