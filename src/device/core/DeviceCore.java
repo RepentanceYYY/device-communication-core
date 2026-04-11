@@ -33,7 +33,8 @@ public class DeviceCore {
             this.commDispatcher.onAllTasksCompleted = this::onAllTasksCompleted;
         }
     }
-    public Charset getCharset(){
+
+    public Charset getCharset() {
         return this.commDispatcher.getCharset();
     }
 
@@ -106,6 +107,18 @@ public class DeviceCore {
 
     /**
      * 写入数据
+     * 优先级为10，重试0次，无回调
+     *
+     * @param writeBytes
+     * @param timeout
+     * @param dataReceived 回调
+     */
+    public void write(byte[] writeBytes, long timeout, BiConsumer<byte[], byte[]> dataReceived) {
+        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, timeout, dataReceived);
+    }
+
+    /**
+     * 写入数据
      *
      * @param writeASCII
      */
@@ -123,6 +136,16 @@ public class DeviceCore {
     public void write(String writeASCII, int retryCount, long timeout) {
         byte[] writeBytes = writeASCII.getBytes(this.commDispatcher.getCharset());
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, retryCount, timeout, this::callback);
+    }
+
+    public void write(String writeASCII, long timeout,BiConsumer<byte[], byte[]> dataReceived) {
+        byte[] writeBytes = writeASCII.getBytes(this.commDispatcher.getCharset());
+        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, timeout, dataReceived);
+    }
+
+    public void write(String writeASCII, BiConsumer<byte[], byte[]> dataReceived) {
+        byte[] writeBytes = writeASCII.getBytes(this.commDispatcher.getCharset());
+        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, dataReceived);
     }
 
 
@@ -158,8 +181,7 @@ public class DeviceCore {
      * @param writeBytes 写入到设备的数据
      */
     public void receive(byte[] readBytes, byte[] writeBytes) {
-        System.out.println(HexUtils.bytesToHexString(writeBytes));
-        System.out.println(HexUtils.bytesToHexString(readBytes));
+        System.out.println("被标记为主动上报的帧:" + HexUtils.bytesToHexString(readBytes));
     }
 
     /**
@@ -169,8 +191,9 @@ public class DeviceCore {
      * @param writeBytes
      */
     protected void callback(byte[] readBytes, byte[] writeBytes) {
-        System.out.println("send-->" + HexUtils.bytesToHexString(writeBytes));
-        System.out.println("receive-->" + HexUtils.bytesToHexString(readBytes));
+        System.out.println("进入默认回调:");
+        System.out.println("发送:" + HexUtils.bytesToHexString(writeBytes));
+        System.out.println("接收:" + HexUtils.bytesToHexString(readBytes));
     }
 
     /**

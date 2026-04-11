@@ -22,6 +22,6 @@ public class Main {
         dispatcher.setDeviceBase(device);
 
         device.setWriteIntervalTime(50L);
-        device.setSlaveDeviceAddress(8,15);
+        device.enabledBacklight("01",true);
     }
 }
