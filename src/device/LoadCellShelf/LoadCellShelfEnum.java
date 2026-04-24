@@ -1,4 +1,4 @@
-package device.enums;
+package device.LoadCellShelf;
 
 public class LoadCellShelfEnum {
 

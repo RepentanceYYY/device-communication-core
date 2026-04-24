@@ -1,10 +1,8 @@
-package device;
+package device.LoadCellShelf;
 
 import device.core.CommDispatcher;
 import device.core.DeviceCore;
 import device.core.IFrameProtocol;
-import device.enums.InventoryLimitType;
-import device.enums.LampColor;
 import device.model.PositionData;
 import device.utils.ByteUtils;
 import device.utils.HexUtils;
@@ -14,6 +12,9 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 
 /**
  * 称重货架
@@ -127,13 +128,33 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      *
      * @param addressHex 字符串格式Hex地址
      * @param enabled    true=启用；false=停用
+     * @return
      */
-    public void setEnabled(String addressHex, Boolean enabled) {
+    public Boolean setEnabledSync(String addressHex, Boolean enabled) {
         String status = enabled ? "01" : "00";
         String frameASCII = addressHex + "work " + status;
         this.switchModel(0);
-        this.write(frameASCII, 8000000L);
-        this.switchModel(1);
+        try {
+            return writeSync(frameASCII, 4000L, (readBytes, writeBytes) -> {
+                if (readBytes == null || readBytes.length < 2) {
+                    return false;
+                }
+                return readBytes[1] == (byte) 0x30;
+            });
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    private void setEnabledCallback(byte[] readBytes, byte[] writeBytes) {
+        if (readBytes == null || readBytes.length < 2) {
+            System.out.println("超时");
+        }
+        if (readBytes[1] == (byte) 0x30) {
+            System.out.println("启用停用成功");
+        } else {
+            System.out.println("启用停用失败");
+        }
     }
 
     /**
@@ -361,6 +382,23 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
         this.write(ascii, 2000L, this::callback);
     }
 
+    public Boolean setScreenDisplayTestSync(String addressHex, String titleIndex, String text) throws Exception {
+        String ascii = addressHex + "pdstr " + titleIndex.trim() + "," + text.trim();
+        try {
+            return writeSync(ascii, 2,100L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return false;
+                }
+                if (readBytes.length != 2) {
+                    return false;
+                }
+                return readBytes[1] == (byte) 0x30;
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
+    }
+
 
     @Override
     public boolean validate(byte[] readBytes) {
@@ -425,6 +463,45 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
         } catch (Exception ex) {
             return false;
         }
+    }
+
+    public <T> T writeSync(String frameASCII, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+
+        CompletableFuture<T> future = new CompletableFuture<>();
+
+        this.write(frameASCII, timeout, (readBytes, writeBytes) -> {
+            try {
+                T result = parser.apply(readBytes, writeBytes);
+                future.complete(result);
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        });
+
+        return future.get(timeout, TimeUnit.MILLISECONDS);
+    }
+
+    public <T> T writeSync(String frameASCII, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+
+        CompletableFuture<T> future =
+                new CompletableFuture<>();
+
+        this.write(frameASCII, retryCount, timeout, (readBytes, writeBytes) -> {
+
+                    try {
+
+                        T result = parser.apply(readBytes, writeBytes);
+
+                        future.complete(result);
+
+                    } catch (Exception e) {
+
+                        future.completeExceptionally(e);
+                    }
+
+                });
+
+        return future.get((retryCount + 1) * timeout, TimeUnit.MILLISECONDS);
     }
 
     /**

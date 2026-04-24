@@ -1,4 +1,4 @@
-package device.enums;
+package device.LoadCellShelf;
 
 /**
  * 灯光颜色枚举

@@ -148,6 +148,11 @@ public class DeviceCore {
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, dataReceived);
     }
 
+    public void write(String writeASCII, int retryCount, long timeout,BiConsumer<byte[], byte[]> dataReceived) {
+        byte[] writeBytes = writeASCII.getBytes(this.commDispatcher.getCharset());
+        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, retryCount, timeout, dataReceived);
+    }
+
 
     /**
      * 基础校验

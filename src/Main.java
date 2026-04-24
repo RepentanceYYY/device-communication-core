@@ -1,12 +1,14 @@
-import device.LoadCellShelfDevice;
+import device.LoadCellShelf.LoadCellShelfDevice;
 import device.channel.ChannelFactory;
 import device.channel.TcpClientChannel;
 import device.core.TcpClientDispatcher;
 import device.enums.ChannelType;
 import device.model.ChannelConfig;
 
+import java.io.IOException;
+
 public class Main {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
         ChannelConfig config = new ChannelConfig();
         config.setType(ChannelType.TCP_CLIENT);
@@ -22,6 +24,7 @@ public class Main {
         dispatcher.setDeviceBase(device);
 
         device.setWriteIntervalTime(50L);
-        device.enabledBacklight("01",true);
+        device.open();
+        System.out.println(device.setScreenDisplayTestSync("01","0","无题编号"));
     }
 }
