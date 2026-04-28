@@ -5,7 +5,12 @@ import device.utils.HexUtils;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 
 public class DeviceCore {
     public static DeviceCore instance = new DeviceCore();
@@ -117,6 +122,10 @@ public class DeviceCore {
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, timeout, dataReceived);
     }
 
+    public void write(byte[] writeBytes, int retryCount, long timeout, BiConsumer<byte[], byte[]> dataReceived) {
+        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, retryCount, timeout, dataReceived);
+    }
+
     /**
      * 写入数据
      *
@@ -138,7 +147,7 @@ public class DeviceCore {
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, retryCount, timeout, this::callback);
     }
 
-    public void write(String writeASCII, long timeout,BiConsumer<byte[], byte[]> dataReceived) {
+    public void write(String writeASCII, long timeout, BiConsumer<byte[], byte[]> dataReceived) {
         byte[] writeBytes = writeASCII.getBytes(this.commDispatcher.getCharset());
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, timeout, dataReceived);
     }
@@ -148,9 +157,65 @@ public class DeviceCore {
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, dataReceived);
     }
 
-    public void write(String writeASCII, int retryCount, long timeout,BiConsumer<byte[], byte[]> dataReceived) {
+    public void write(String writeASCII, int retryCount, long timeout, BiConsumer<byte[], byte[]> dataReceived) {
         byte[] writeBytes = writeASCII.getBytes(this.commDispatcher.getCharset());
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, retryCount, timeout, dataReceived);
+    }
+
+    /**
+     * 写入数据同步获取结果
+     * @param frameBytes
+     * @param retryCount
+     * @param timeout
+     * @param parser
+     * @return
+     * @param <T>
+     * @throws Exception
+     */
+    public <T> T writeSync(byte[] frameBytes, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        this.write(frameBytes, retryCount, timeout, (readBytes, writeBytes) -> {
+            try {
+                T result = parser.apply(readBytes, writeBytes);
+                future.complete(result);
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        });
+        return future.get((retryCount + 1) * timeout, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 写入数据同步获取结果
+     *
+     * @param frameASCII
+     * @param retryCount
+     * @param timeout
+     * @param parser
+     * @param <T>
+     * @return
+     * @throws Exception
+     */
+    public <T> T writeSync(String frameASCII, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+
+        CompletableFuture<T> future = new CompletableFuture<>();
+
+        this.write(frameASCII, retryCount, timeout, (readBytes, writeBytes) -> {
+
+            try {
+
+                T result = parser.apply(readBytes, writeBytes);
+
+                future.complete(result);
+
+            } catch (Exception e) {
+
+                future.completeExceptionally(e);
+            }
+
+        });
+
+        return future.get((retryCount + 1) * timeout, TimeUnit.MILLISECONDS);
     }
 
 
@@ -186,7 +251,10 @@ public class DeviceCore {
      * @param writeBytes 写入到设备的数据
      */
     public void receive(byte[] readBytes, byte[] writeBytes) {
-        System.out.println("被标记为主动上报的帧:" + HexUtils.bytesToHexString(readBytes));
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+        String now = LocalDateTime.now().format(formatter);
+
+        System.out.println(now + " 被标记为主动上报的帧:" + HexUtils.bytesToHexString(readBytes));
     }
 
     /**
@@ -205,6 +273,6 @@ public class DeviceCore {
      * 队列执行完毕后执行
      */
     public void onAllTasksCompleted() {
-        System.out.println("当前所有队列执行完毕");
+        // System.out.println("当前所有队列执行完毕");
     }
 }

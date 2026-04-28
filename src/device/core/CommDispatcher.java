@@ -99,6 +99,7 @@ public abstract class CommDispatcher {
 
     /**
      * 获取当前编码格式
+     *
      * @return
      */
     public abstract Charset getCharset();
@@ -135,7 +136,7 @@ public abstract class CommDispatcher {
      * @param retryCount 重试次数
      */
     public void write(byte[] writeBytes, int priority, int retryCount) {
-        this.enqueueAction(DispatchMode.SEQUENTIAL,writeBytes,priority,retryCount,null);
+        this.enqueueAction(DispatchMode.SEQUENTIAL, writeBytes, priority, retryCount, null);
     }
 
     /**
@@ -144,10 +145,10 @@ public abstract class CommDispatcher {
      * @param writeBytes 写入的数据
      * @param priority   优先级
      * @param retryCount 重试次数
-     * @param timeout 响应超时时间
+     * @param timeout    响应超时时间
      */
-    public void write(byte[] writeBytes, int priority, int retryCount,long timeout) {
-        this.enqueueAction(DispatchMode.SEQUENTIAL,writeBytes,priority,retryCount,timeout,null);
+    public void write(byte[] writeBytes, int priority, int retryCount, long timeout) {
+        this.enqueueAction(DispatchMode.SEQUENTIAL, writeBytes, priority, retryCount, timeout, null);
     }
 
     /**
@@ -170,11 +171,11 @@ public abstract class CommDispatcher {
      * @param writeBytes   写入的数据
      * @param priority     优先级
      * @param retryCount   重试次数
-     * @param timeout 响应超时时间
+     * @param timeout      响应超时时间
      * @param dataReceived 响应回调
      */
-    public void write(DispatchMode strategy, byte[] writeBytes, int priority, int retryCount,long timeout, BiConsumer<byte[], byte[]> dataReceived) {
-        this.enqueueAction(strategy, writeBytes, priority, retryCount,timeout, dataReceived);
+    public void write(DispatchMode strategy, byte[] writeBytes, int priority, int retryCount, long timeout, BiConsumer<byte[], byte[]> dataReceived) {
+        this.enqueueAction(strategy, writeBytes, priority, retryCount, timeout, dataReceived);
     }
 
     /**
@@ -209,11 +210,11 @@ public abstract class CommDispatcher {
      * @param timeout
      * @param dataReceived
      */
-    protected void enqueueAction(DispatchMode strategy, byte[] writeBytes, int priority, int retryCount,long timeout, BiConsumer<byte[], byte[]> dataReceived) {
+    protected void enqueueAction(DispatchMode strategy, byte[] writeBytes, int priority, int retryCount, long timeout, BiConsumer<byte[], byte[]> dataReceived) {
 
         if (writeBytes == null || writeBytes.length < 1) return;
 
-        Task task = new Task(writeBytes, priority, retryCount,timeout, dataReceived);
+        Task task = new Task(writeBytes, priority, retryCount, timeout, dataReceived);
 
         switch (strategy) {
             case PRIORITY -> this.priorityQueue.offer(task);
@@ -229,47 +230,61 @@ public abstract class CommDispatcher {
         Task task;
 
         while ((task = getDeviceActionModel()) != null) {
-            int retries = task.getRetryCount();
-            boolean success = true;
+            int initialRetryCount = task.getRetryCount();
+            int retries = initialRetryCount;
+            boolean success = false;
             byte[] responseData = null;
-            // 获取该任务的策略
             CommMode strategy = task.getActionStrategy();
+
             while (retries >= 0) {
-                success = false;
+                if (!isOpen()) {
+                    try {
+                        open();
+                    } catch (IOException e) {
+                        System.err.println("连接打开失败: " + e.getMessage());
+                        retries--;
+                        try {
+                            TimeUnit.MILLISECONDS.sleep(200);
+                        } catch (InterruptedException ignore) {
+                        }
+                        continue;
+                    }
+                }
+
+                if (device.getWriteIntervalTime() > 0) {
+                    try {
+                        Thread.sleep(device.getWriteIntervalTime());
+                    } catch (InterruptedException ignore) {
+                    }
+                }
+
                 lock.lock();
                 try {
                     this.currentTask = task;
                     this.lastReadBytes = null;
 
-                    if (!isOpen()) {
-                        try {
-                            open();
-                        } catch (IOException e) {
-                            System.err.println("连接打开失败: " + e.getMessage());
-                            lock.unlock();
-                            TimeUnit.MILLISECONDS.sleep(200);
-                            lock.lock();
-                            retries--;
-                            continue;
-                        }
+                    String hexData = HexUtils.bytesToHexString(task.getWriteBytes());
+                    if (retries == initialRetryCount) {
+                        System.out.println("[CommDispatcher] [首次写入] 数据: " + hexData);
+                    } else {
+                        System.out.println("[CommDispatcher] [第 " + (initialRetryCount - retries) + " 次重试] 数据: " + hexData);
                     }
-                    Thread.sleep(device.getWriteIntervalTime());
-                    System.out.println("即将写入:"+ HexUtils.bytesToHexString(this.currentTask.getWriteBytes()));
+
                     write(task);
 
                     if (strategy == CommMode.WAIT_RESPONSE) {
-                        // 等待响应
+
                         success = responseCondition.await(task.getTimeout(), TimeUnit.MILLISECONDS);
                         if (success) {
                             responseData = this.lastReadBytes;
-                            break; // 成功则跳出重试循环
+                        } else {
+                            System.err.println("[CommDispatcher] 等待响应超时 (Timeout: " + task.getTimeout() + "ms)");
                         }
                     } else {
-                        // 非同步模式，直接视为发送成功
                         success = true;
-                        break;
                     }
 
+                    if (success) break;
 
                 } catch (Exception ex) {
                     System.err.println("通信异常: " + ex.getMessage());
@@ -302,6 +317,7 @@ public abstract class CommDispatcher {
             }
         }
 
+        // 队列清空后的通知
         if (onAllTasksCompleted != null) {
             try {
                 onAllTasksCompleted.run();
@@ -317,22 +333,19 @@ public abstract class CommDispatcher {
      * @param readBytes
      */
     public void receive(byte[] readBytes) {
-        // 基础校验
         if (device == null || !device.validate(readBytes)) return;
-        // 认领逻辑
-        if (lock.tryLock()) {
-            try {
-                if (this.currentTask != null) {
-                    // 只要匹配成功，就截获该包
-                    if (device.isMatch(this.currentTask.getWriteBytes(), readBytes)) {
-                        this.lastReadBytes = readBytes;
-                        responseCondition.signalAll(); // 唤醒发送线程
-                        return; // 匹配成功，拦截此包
-                    }
+
+        lock.lock();
+        try {
+            if (this.currentTask != null) {
+                if (device.isMatch(this.currentTask.getWriteBytes(), readBytes)) {
+                    this.lastReadBytes = readBytes;
+                    responseCondition.signalAll();
+                    return;
                 }
-            } finally {
-                lock.unlock();
             }
+        } finally {
+            lock.unlock();
         }
         device.receive(readBytes, null);
     }

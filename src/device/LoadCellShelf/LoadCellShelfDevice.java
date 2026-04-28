@@ -115,7 +115,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      */
     private void readAddressAndModelCallback(byte[] readBytes, byte[] writeBytes) {
         super.callback(readBytes, writeBytes);
-        byte[] dataPackage = ByteUtils.slice(readBytes, 7, readBytes.length - 2);
+        byte[] dataPackage = ByteUtils.slice(readBytes, 7, readBytes.length - 3);
         int startAddress = dataPackage[0];
         int endAddress = dataPackage[1];
         int model = dataPackage[2];
@@ -126,23 +126,25 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
     /**
      * 停用启用货位
      *
-     * @param addressHex 字符串格式Hex地址
-     * @param enabled    true=启用；false=停用
+     * @param address 设备地址
+     * @param enabled true=启用；false=停用
      * @return
      */
-    public Boolean setEnabledSync(String addressHex, Boolean enabled) {
+    public Boolean setShelfSlotStateSync(byte address, Boolean enabled) throws Exception {
         String status = enabled ? "01" : "00";
-        String frameASCII = addressHex + "work " + status;
-        this.switchModel(0);
+        String frameASCII = HexUtils.byteToHex(address) + "work " + status;
         try {
-            return writeSync(frameASCII, 4000L, (readBytes, writeBytes) -> {
-                if (readBytes == null || readBytes.length < 2) {
+            return writeSync(frameASCII, 2, 8000L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return false;
+                }
+                if (readBytes.length < 2) {
                     return false;
                 }
                 return readBytes[1] == (byte) 0x30;
             });
         } catch (Exception ex) {
-            return false;
+            throw ex;
         }
     }
 
@@ -197,22 +199,107 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
     }
 
     /**
-     * 读取重量
+     * 获取重量(已去皮)
      *
-     * @param addressHex
+     * @param address
+     * @return
+     * @throws Exception
      */
-    public void readWeight(String addressHex) {
-        String ascii = addressHex + "weight";
-        byte[] frame = ascii.getBytes(super.getCharset());
-        this.write(frame, this::readWeightCallback);
+    public Double getNetWeightSync(int address) throws Exception {
+        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "weight";
+        try {
+            return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return null;
+                }
+                if (readBytes.length <= 2) {
+                    return null;
+                }
+                byte[] dataPackage = ByteUtils.slice(readBytes, 3, readBytes.length - 3);
+                String asciiString = new String(dataPackage, StandardCharsets.US_ASCII);
+                double value = Double.parseDouble(asciiString);
+                return value;
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
     }
 
-    private void readWeightCallback(byte[] readBytes, byte[] writeBytes) {
-        super.callback(readBytes, writeBytes);
-        byte[] dataPackage = ByteUtils.slice(readBytes, 3, readBytes.length - 1);
-        String asciiString = new String(dataPackage, StandardCharsets.US_ASCII);
-        double value = Double.parseDouble(asciiString);
-        System.out.println("重量为:" + value + "kg");
+    /**
+     * 获取现存数量
+     *
+     * @param address
+     * @return
+     * @throws Exception
+     */
+    public Integer getQuantitySync(int address) throws Exception {
+        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "hdnum";
+        try {
+            return this.writeSync(ascii, 2, 500L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return null;
+                }
+                if (readBytes.length <= 2) {
+                    return null;
+                }
+                byte[] dataPackage = ByteUtils.slice(readBytes, 3, readBytes.length - 3);
+                String asciiString = new String(dataPackage, StandardCharsets.US_ASCII);
+                Integer value = Integer.parseInt(asciiString);
+                return value;
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
+    }
+
+    /**
+     * 设置货位库存下限
+     *
+     * @param address
+     * @param lowerLimit
+     * @return
+     * @throws Exception
+     */
+    public Boolean setShelfSlotInventoryLowerLimitSync(int address, int lowerLimit) throws Exception {
+        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "limdn 0," + lowerLimit;
+        try {
+            return writeSync(ascii, 1000L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return null;
+                }
+                if (readBytes.length < 2) {
+                    return false;
+                }
+                return readBytes[1] == (byte) 0x30;
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
+    }
+
+    /**
+     * 设置货位上限
+     *
+     * @param address
+     * @param upperLimit
+     * @return
+     * @throws Exception
+     */
+    public Boolean setShelfSlotInventoryUpperLimitSync(int address, int upperLimit) throws Exception {
+        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "limup 0," + upperLimit;
+        try {
+            return writeSync(ascii, 1000L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return false;
+                }
+                if (readBytes.length < 2) {
+                    return false;
+                }
+                return readBytes[1] == (byte) 0x30;
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
     }
 
     /**
@@ -316,15 +403,96 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
     /**
      * 设置取货结束时间
      *
-     * @param addressHex
+     * @param address
      * @param time
+     * @return
+     * @throws Exception
      */
-    public void setovtime(String addressHex, int time) {
-        if (time < 1 || time > 255) {
-            time = 255;
+    public Boolean setPickupEndTimeSync(int address, int time) throws Exception {
+
+        String ascii = StringUtils.join(HexUtils.byteToHex((byte) (address & 0xFF)), "ovtime ", time / 10);
+        try {
+            return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return null;
+                }
+                if (readBytes.length < 2) return false;
+                return readBytes[1] == (byte) 0x30;
+            });
+        } catch (Exception ex) {
+            throw ex;
         }
-        String ascii = StringUtils.join(addressHex, "ovtime ", time / 10);
-        this.write(ascii);
+    }
+
+    /**
+     * 去皮(校准)
+     *
+     * @param address
+     */
+    public Boolean tareSync(int address) throws Exception {
+        String ascii = HexUtils.byteToHex(((byte) (address & 0xFF))) + "fixed 0,0";
+        try {
+            return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return null;
+                }
+                if (readBytes.length < 2) return false;
+                return readBytes[1] == (byte) 0x30;
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
+    }
+
+    /**
+     * 设置单重(校准)
+     *
+     * @param address
+     * @param count
+     * @return
+     * @throws Exception
+     */
+    public Boolean setUnitWeightSync(int address, int count) throws Exception {
+        String addressHex = HexUtils.byteToHex((byte) (address & 0xFF));
+        String ascii = addressHex + "fixed 1," + count;
+        try {
+            return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return false;
+                }
+                if (readBytes.length < 2) return false;
+                return readBytes[1] == (byte) 0x30;
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
+    }
+
+    /**
+     * 获取单重(校准)
+     *
+     * @param address
+     * @return
+     * @throws Exception
+     */
+    public Double getUniWeightSync(int address) throws Exception {
+        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "fixed 4,1";
+        try {
+            return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
+                if (readBytes == null) {
+                    return null;
+                }
+                if (readBytes.length <= 2) return null;
+                System.out.println(HexUtils.bytesToHexString(readBytes));
+                byte[] dataPackage = ByteUtils.slice(readBytes, 3, readBytes.length - 3);
+                System.out.println(HexUtils.bytesToHexString(dataPackage));
+                String asciiString = new String(dataPackage, StandardCharsets.US_ASCII);
+                double value = Double.parseDouble(asciiString);
+                return value;
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
     }
 
     /**
@@ -340,11 +508,12 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
         this.write(ascii, this::calibrationCallback);
     }
 
+
     private void calibrationCallback(byte[] readBytes, byte[] writeBytes) {
         super.callback(readBytes, writeBytes);
         // 读重量值
         if (writeBytes[8] == (byte) 0x34) {
-            byte[] dataPackage = ByteUtils.slice(readBytes, 3, readBytes.length - 2);
+            byte[] dataPackage = ByteUtils.slice(readBytes, 3, readBytes.length - 3);
             String asciiString = new String(dataPackage, StandardCharsets.US_ASCII);
             System.out.println("重量为:" + asciiString + "g");
         }
@@ -368,24 +537,19 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
 
     }
 
-
     /**
      * 设置屏幕显示文字
      *
-     * @param addressHex 屏幕地址
+     * @param address    屏幕地址
      * @param titleIndex 标题索引:
      *                   0:货位,1:名称,2:规格,3:单位(小数),4:单位(整数)
      * @param text       内容
      */
-    public void setScreenDisplayText(String addressHex, String titleIndex, String text) {
-        String ascii = addressHex + "pdstr " + titleIndex.trim() + "," + text.trim();
-        this.write(ascii, 2000L, this::callback);
-    }
+    public Boolean setScreenDisplayTestSync(int address, int titleIndex, String text) throws Exception {
 
-    public Boolean setScreenDisplayTestSync(String addressHex, String titleIndex, String text) throws Exception {
-        String ascii = addressHex + "pdstr " + titleIndex.trim() + "," + text.trim();
+        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "pdstr " + titleIndex + "," + text.trim();
         try {
-            return writeSync(ascii, 2,100L, (readBytes, writeBytes) -> {
+            return writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
                     return false;
                 }
@@ -465,7 +629,8 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
         }
     }
 
-    public <T> T writeSync(String frameASCII, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+    public <T> T writeSync(String frameASCII, long timeout,
+                           BiFunction<byte[], byte[], T> parser) throws Exception {
 
         CompletableFuture<T> future = new CompletableFuture<>();
 
@@ -488,18 +653,18 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
 
         this.write(frameASCII, retryCount, timeout, (readBytes, writeBytes) -> {
 
-                    try {
+            try {
 
-                        T result = parser.apply(readBytes, writeBytes);
+                T result = parser.apply(readBytes, writeBytes);
 
-                        future.complete(result);
+                future.complete(result);
 
-                    } catch (Exception e) {
+            } catch (Exception e) {
 
-                        future.completeExceptionally(e);
-                    }
+                future.completeExceptionally(e);
+            }
 
-                });
+        });
 
         return future.get((retryCount + 1) * timeout, TimeUnit.MILLISECONDS);
     }

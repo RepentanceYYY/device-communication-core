@@ -69,4 +69,32 @@ public final class CheckSumUtils {
 
         return bcc;
     }
+
+    /**
+     * 分子筛专用CRC8校验
+     *
+     * @param data
+     * @param offset
+     * @param length
+     * @return
+     */
+    public static int calculateCrc8(byte[] data, int offset, int length) {
+        int crc = 0xFF;
+
+        for (int idx = 0; idx < length; idx++) {
+            int ch1 = data[idx + offset] & 0xFF;
+
+            for (int i = 0; i < 8; i++) {
+                if (((crc ^ ch1) & 0x80) > 0) {
+                    crc = ((crc << 1) ^ 0x1D) & 0xFF;
+                } else {
+                    crc = (crc << 1) & 0xFF;
+                }
+
+                ch1 = (ch1 << 1) & 0xFF;
+            }
+        }
+
+        return (crc ^ 0xFF) & 0xFF;
+    }
 }

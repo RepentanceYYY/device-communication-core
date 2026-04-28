@@ -5,8 +5,8 @@ public class ByteUtils {
      * 截取 byte 数组
      *
      * @param array 原始数组
-     * @param start 起始索引（包含）
-     * @param end   结束索引（不包含）
+     * @param start 起始索引
+     * @param end   结束索引
      * @return 新的子数组
      * @throws IllegalArgumentException 如果索引非法
      */
@@ -14,19 +14,20 @@ public class ByteUtils {
         if (array == null) {
             throw new IllegalArgumentException("Input array cannot be null");
         }
-        if (start < 0 || end > array.length || start > end) {
+        if (start < 0 || end >= array.length || start > end) {
             throw new IllegalArgumentException(
                     "Invalid start or end index: start=" + start + ", end=" + end
             );
         }
-        int length = end - start;
+        int length = end - start + 1;
         byte[] result = new byte[length];
         System.arraycopy(array, start, result, 0, length);
         return result;
     }
 
     /**
-     *  合并byte数组
+     * 合并byte数组
+     *
      * @param arrays
      * @return
      */

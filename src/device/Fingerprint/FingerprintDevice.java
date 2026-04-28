@@ -1,4 +1,4 @@
-package device;
+package device.Fingerprint;
 
 import device.core.CommDispatcher;
 import device.core.DeviceCore;
@@ -29,18 +29,21 @@ public class FingerprintDevice extends DeviceCore implements IFrameProtocol {
     public void readValidTemplateNumber() {
         String frameStr = "EF 01 FF FF FF FF 01 00 03 1D 00 21";
         byte[] frame = new byte[]{(byte) 0xEF, (byte) 0x01, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0x01, (byte) 0x00, (byte) 0x03, (byte) 0x1D, (byte) 0x00, (byte) 0x21};
-        this.write(frame, this::readValidTemplateNumberCallback);
+        try {
+            this.writeSync(frame, 0, 1000L, (readBytes, writeBytes) -> {
+                System.out.println("读取有效指纹模板:");
+                System.out.println("send-->" + HexUtils.bytesToHexString(writeBytes));
+                System.out.println("receive-->" + HexUtils.bytesToHexString(readBytes));
+                return null;
+            });
+        } catch (Exception ex) {
+            System.out.println("读取有效指纹模型出现异常");
+        }
     }
 
     public void setLamplight() {
         String frameStr = "EF 01 FF FF FF FF 01 00 07 3C 03 00 07 00 00 4E";
         this.write(HexUtils.hexToBytes(frameStr), this::callback);
-    }
-
-    private void readValidTemplateNumberCallback(byte[] readBytes, byte[] writeBytes) {
-        System.out.println("读取有效指纹模板:");
-        System.out.println("send-->" + HexUtils.bytesToHexString(writeBytes));
-        System.out.println("receive-->" + HexUtils.bytesToHexString(readBytes));
     }
 
     public void empty() {
@@ -61,6 +64,7 @@ public class FingerprintDevice extends DeviceCore implements IFrameProtocol {
         fullFrame[12] = (byte) (checkSumInt & 0xFF);
         this.write(fullFrame, this::readIndexTableCallback);
     }
+
     public void readIndexTableCallback(byte[] readBytes, byte[] writeBytes) {
 
         if (readBytes == null || readBytes.length < 44) {
