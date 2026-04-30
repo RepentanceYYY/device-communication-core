@@ -20,10 +20,82 @@ import java.util.function.BiFunction;
  * 称重货架
  */
 public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
+    
+    /**
+     * 接收缓冲区，用于处理TCP粘包/拆包
+     */
+    private java.io.ByteArrayOutputStream receiveBuffer = new java.io.ByteArrayOutputStream();
+    
     @Override
     public void setCommDispatcher(CommDispatcher comm) {
         super.setCommDispatcher(comm);
         comm.responseTimeout = 1500;
+    }
+
+    /**
+     * 重写receive方法，在设备层实现帧分割逻辑
+     * 协议规则：
+     * 1. 读取命令响应以 \r\n (0x0D 0x0A) 结尾
+     * 2. 设置命令响应为 2 字节：地址 + 0x30(成功) 或 0x31(失败)
+     */
+    @Override
+    public void receive(byte[] readBytes, byte[] writeBytes) {
+        // 将接收到的数据添加到缓冲区
+        for (byte b : readBytes) {
+            receiveBuffer.write(b);
+        }
+        
+        // 检查缓冲区是否有完整帧
+        processBufferedData(writeBytes);
+    }
+    
+    /**
+     * 处理缓冲区中的数据，提取完整帧
+     * @param writeBytes 当前请求的写入数据（用于日志）
+     */
+    private void processBufferedData(byte[] writeBytes) {
+        while (receiveBuffer.size() > 0) {
+            byte[] currentData = receiveBuffer.toByteArray();
+            int bufLen = currentData.length;
+            
+            boolean isCompleteFrame = false;
+            int frameLength = 0;
+            
+            // 规则1: 检测帧尾 (最后一个是 0x0A, 倒数第二个可以是任何值，通常是 0x0D)
+            // 这样可以兼容 0D 0A, 8D 0A, 0C 0A 等情况
+            if (bufLen >= 2 && currentData[bufLen - 1] == (byte)0x0A) {
+                isCompleteFrame = true;
+                frameLength = bufLen;
+            }
+            // 规则2: 检测设置命令响应 (2字节: 地址 + 0x30/0x31)
+            else if (bufLen >= 2 && 
+                     (currentData[1] == (byte)0x30 || currentData[1] == (byte)0x31)) {
+                isCompleteFrame = true;
+                frameLength = 2;
+            }
+            
+            if (isCompleteFrame) {
+                // 提取完整帧
+                byte[] frame = new byte[frameLength];
+                System.arraycopy(currentData, 0, frame, 0, frameLength);
+                
+                // 移除已处理的数据
+                byte[] remaining = new byte[bufLen - frameLength];
+                if (remaining.length > 0) {
+                    System.arraycopy(currentData, frameLength, remaining, 0, remaining.length);
+                }
+                receiveBuffer.reset();
+                if (remaining.length > 0) {
+                    receiveBuffer.write(remaining, 0, remaining.length);
+                }
+                
+                // 调用父类的receive处理完整帧
+                super.receive(frame, writeBytes);
+            } else {
+                // 没有完整帧，退出循环等待更多数据
+                break;
+            }
+        }
     }
 
     /**
@@ -237,13 +309,36 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
         try {
             return this.writeSync(ascii, 2, 500L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
+                    System.err.println("[getQuantitySync] 响应为null");
                     return null;
                 }
-                if (readBytes.length <= 2) {
+                // 至少需要：地址(1) + 状态(1) + 数据(1+) + 帧尾(2) = 5字节
+                // 帧尾通常是 0D 0A，但也可能是 8D 0A 等异常情况
+                if (readBytes.length < 5) {
+                    System.err.println("[getQuantitySync] 响应数据太短: " + readBytes.length + " bytes, 数据: " + HexUtils.bytesToHexString(readBytes));
                     return null;
                 }
-                byte[] dataPackage = ByteUtils.slice(readBytes, 3, readBytes.length - 3);
-                String asciiString = new String(dataPackage, StandardCharsets.US_ASCII);
+                // 提取数据部分：从索引3开始，到倒数第3个字节结束（去掉最后2字节的帧尾）
+                // 例如：01 30 30 33 0D 0A -> 提取索引3的 33
+                int endIndex = readBytes.length - 3;  // 倒数第三个字节的索引
+                // 确保 startIndex <= endIndex
+                if (endIndex < 3) {
+                    return null;
+                }
+                byte[] dataPackage = ByteUtils.slice(readBytes, 3, endIndex);
+                if (dataPackage == null || dataPackage.length == 0) {
+                    return null;
+                }
+                String asciiString = new String(dataPackage, StandardCharsets.US_ASCII).trim();
+                if (asciiString.isEmpty()) {
+                    return null;  // 返回null会触发重试
+                }
+                // 校验是否全为数字字符
+                for (char c : asciiString.toCharArray()) {
+                    if (!Character.isDigit(c)) {
+                        return null;  // 返回null会触发重试
+                    }
+                }
                 Integer value = Integer.parseInt(asciiString);
                 return value;
             });

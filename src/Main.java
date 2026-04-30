@@ -21,14 +21,18 @@ public class Main {
 
         dispatcher.setDeviceBase(device);
 
-        device.setWriteIntervalTime(250L);
+        device.setWriteIntervalTime(120L);
         device.open();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 50; i++) {
+            Thread.sleep(1000L);
             try {
                 long start = System.currentTimeMillis();
-                System.out.println("0x01现存数量：" + device.getQuantitySync(1));
-                System.out.println("0x02现存数量：" + device.getQuantitySync(2));
-
+                for (int j = 0; j < 13; j++) {
+                    device.getQuantitySync(1);
+                    device.getQuantitySync(2);
+                    device.getQuantitySync(8);
+                }
+                device.getQuantitySync(1);
                 long end = System.currentTimeMillis();
                 System.out.println("------------------ 总耗时：" + (end - start) + " ms");
             } catch (Exception ex) {
@@ -36,5 +40,6 @@ public class Main {
             }
         }
         System.out.println("结束循环");
+
     }
 }

@@ -251,23 +251,16 @@ public abstract class CommDispatcher {
                     }
                 }
 
-                if (device.getWriteIntervalTime() > 0) {
-                    try {
-                        Thread.sleep(device.getWriteIntervalTime());
-                    } catch (InterruptedException ignore) {
-                    }
-                }
-
                 lock.lock();
                 try {
                     this.currentTask = task;
                     this.lastReadBytes = null;
 
-                    String hexData = HexUtils.bytesToHexString(task.getWriteBytes());
+                    // String hexData = HexUtils.bytesToHexString(task.getWriteBytes());
                     if (retries == initialRetryCount) {
-                        System.out.println("[CommDispatcher] [首次写入] 数据: " + hexData);
+                        // System.out.println("[CommDispatcher] [首次写入] 数据: " + hexData);
                     } else {
-                        System.out.println("[CommDispatcher] [第 " + (initialRetryCount - retries) + " 次重试] 数据: " + hexData);
+                        // System.out.println("[CommDispatcher] [第 " + (initialRetryCount - retries) + " 次重试] 数据: " + hexData);
                     }
 
                     write(task);
@@ -277,6 +270,10 @@ public abstract class CommDispatcher {
                         success = responseCondition.await(task.getTimeout(), TimeUnit.MILLISECONDS);
                         if (success) {
                             responseData = this.lastReadBytes;
+                            if (responseData == null || responseData.length == 0) {
+                                success = false;
+                                System.err.println("[CommDispatcher] 收到空响应");
+                            }
                         } else {
                             System.err.println("[CommDispatcher] 等待响应超时 (Timeout: " + task.getTimeout() + "ms)");
                         }
@@ -294,6 +291,7 @@ public abstract class CommDispatcher {
                     }
                 } finally {
                     this.currentTask = null;
+                    this.lastReadBytes = null;
                     if (lock.isHeldByCurrentThread()) {
                         lock.unlock();
                     }
@@ -302,7 +300,9 @@ public abstract class CommDispatcher {
                 retries--;
                 if (!success && retries >= 0) {
                     try {
-                        TimeUnit.MILLISECONDS.sleep(50);
+                        long backoffTime = 50 + (initialRetryCount - retries) * 30;
+                        System.out.println("[CommDispatcher] 重试前等待 " + backoffTime + "ms");
+                        TimeUnit.MILLISECONDS.sleep(backoffTime);
                     } catch (InterruptedException ignore) {
                     }
                 }
@@ -314,6 +314,17 @@ public abstract class CommDispatcher {
                 } catch (Exception e) {
                     System.err.println("回调异常: " + e.getMessage());
                 }
+            }
+
+            // 在任务之间添加间隔，避免设备处理不过来
+            if (device.getWriteIntervalTime() > 0) {
+                long intervalStart = System.currentTimeMillis();
+                try {
+                    Thread.sleep(device.getWriteIntervalTime());
+                } catch (InterruptedException ignore) {
+                }
+                // long actualInterval = System.currentTimeMillis() - intervalStart;
+                // System.out.println("[CommDispatcher] 实际间隔时间: " + actualInterval + "ms");
             }
         }
 
