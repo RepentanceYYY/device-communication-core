@@ -5,9 +5,6 @@ import device.core.TcpClientDispatcher;
 import device.enums.ChannelType;
 import device.model.ChannelConfig;
 
-import java.io.IOException;
-import java.util.concurrent.CompletableFuture;
-
 public class Main {
     public static void main(String[] args) throws Exception {
 
@@ -24,18 +21,16 @@ public class Main {
 
         dispatcher.setDeviceBase(device);
 
-        device.setWriteIntervalTime(10L);
+        device.setWriteIntervalTime(250L);
         device.open();
-        for(int i=0;i<10;i++){
+        for (int i = 0; i < 10; i++) {
             try {
                 long start = System.currentTimeMillis();
-                System.out.println("0x01现存数量：" + device.getQuantitySync(1)+" <------> 0x02现存数量：" + device.getQuantitySync(2));
-
-
+                System.out.println("0x01现存数量：" + device.getQuantitySync(1));
+                System.out.println("0x02现存数量：" + device.getQuantitySync(2));
 
                 long end = System.currentTimeMillis();
                 System.out.println("------------------ 总耗时：" + (end - start) + " ms");
-                Thread.sleep(1000L);
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
