@@ -8,7 +8,6 @@ import device.utils.ByteUtils;
 import device.utils.HexUtils;
 import device.utils.StringUtils;
 
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -278,7 +277,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      * @throws Exception
      */
     public Double getNetWeightSync(int address) throws Exception {
-        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "weight";
+        String ascii = String.format("%02d", address) + "weight";
         try {
             return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
@@ -305,7 +304,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      * @throws Exception
      */
     public Integer getQuantitySync(int address) throws Exception {
-        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "hdnum";
+        String ascii = String.format("%02d", address) + "hdnum";
         try {
             return this.writeSync(ascii, 2, 500L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
@@ -348,6 +347,36 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
     }
 
     /**
+     * 清空领用数量(同步)
+     *
+     * @param address
+     * @return
+     * @throws Exception
+     */
+    public Boolean clearQuantityIssuedSync(int address) throws Exception {
+        String ascii = String.format("%02d", address) + "clrget";
+        System.out.println(ascii);
+        try {
+            return this.writeSync(ascii, 2, 500L, (readBytes, writeBytes) -> {
+                System.out.println("清空领用数量(同步):" + HexUtils.bytesToHexString(readBytes));
+                if (readBytes == null) {
+                    throw new RuntimeException("结果为null");
+                }
+                if (readBytes.length != 2) {
+                    throw new RuntimeException("设备响应数据非法，数据为：" + HexUtils.bytesToHexString(readBytes));
+                }
+                if (readBytes[1] == (byte) 0x30) {
+                    return true;
+                } else {
+                    throw new RuntimeException("设备响应数据非法，数据为：" + HexUtils.bytesToHexString(readBytes));
+                }
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
+    }
+
+    /**
      * 设置货位库存下限
      *
      * @param address
@@ -356,7 +385,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      * @throws Exception
      */
     public Boolean setShelfSlotInventoryLowerLimitSync(int address, int lowerLimit) throws Exception {
-        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "limdn 0," + lowerLimit;
+        String ascii = String.format("%02d", address) + "limdn 0," + lowerLimit;
         try {
             return writeSync(ascii, 1000L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
@@ -381,7 +410,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      * @throws Exception
      */
     public Boolean setShelfSlotInventoryUpperLimitSync(int address, int upperLimit) throws Exception {
-        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "limup 0," + upperLimit;
+        String ascii = String.format("%02d", address) + "limup 0," + upperLimit;
         try {
             return writeSync(ascii, 1000L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
@@ -505,7 +534,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      */
     public Boolean setPickupEndTimeSync(int address, int time) throws Exception {
 
-        String ascii = StringUtils.join(HexUtils.byteToHex((byte) (address & 0xFF)), "ovtime ", time / 10);
+        String ascii = StringUtils.join(String.format("%02d", address), "ovtime ", time / 10);
         try {
             return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
@@ -525,7 +554,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      * @param address
      */
     public Boolean tareSync(int address) throws Exception {
-        String ascii = HexUtils.byteToHex(((byte) (address & 0xFF))) + "fixed 0,0";
+        String ascii = String.format("%02d", address) + "fixed 0,0";
         try {
             return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
@@ -548,8 +577,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      * @throws Exception
      */
     public Boolean setUnitWeightSync(int address, int count) throws Exception {
-        String addressHex = HexUtils.byteToHex((byte) (address & 0xFF));
-        String ascii = addressHex + "fixed 1," + count;
+        String ascii = String.format("%02d", address) + "fixed 1," + count;
         try {
             return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
@@ -571,7 +599,7 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      * @throws Exception
      */
     public Double getUniWeightSync(int address) throws Exception {
-        String ascii = HexUtils.byteToHex((byte) (address & 0xFF)) + "fixed 4,1";
+        String ascii = String.format("%02d", address) + "fixed 4,1";
         try {
             return this.writeSync(ascii, 2, 1000L, (readBytes, writeBytes) -> {
                 if (readBytes == null) {
@@ -711,17 +739,16 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
      * @return
      */
     private boolean transparentModeIsMatch(byte[] writeBytes, byte[] readBytes) {
-
-        try {
-            byte[] address = new byte[]{writeBytes[0], writeBytes[1]};
-            String addressHex = new String(address, Charset.forName("GB2312"));
-            if (addressHex.equals(HexUtils.byteToHex(readBytes[0]))) {
-                return true;
-            }
-            return false;
-        } catch (Exception ex) {
+        if (writeBytes == null || readBytes == null ||
+                writeBytes.length < 2 || readBytes.length < 1) {
             return false;
         }
+
+        String writeAddr = new String(writeBytes, 0, 2);
+
+        String readAddr = String.format("%02X", readBytes[0] & 0xFF);
+
+        return writeAddr.equalsIgnoreCase(readAddr);
     }
 
     public <T> T writeSync(String frameASCII, long timeout,
