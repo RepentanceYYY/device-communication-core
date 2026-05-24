@@ -237,6 +237,7 @@ public abstract class CommDispatcher {
             CommMode strategy = task.getActionStrategy();
 
             while (retries >= 0) {
+                // 1. 自动断线重连检测
                 if (!isOpen()) {
                     try {
                         open();
@@ -251,23 +252,46 @@ public abstract class CommDispatcher {
                     }
                 }
 
-                lock.lock();
-                try {
-                    this.currentTask = task;
-                    this.lastReadBytes = null;
+                // 2. 状态预初始化（放在锁外面，此时尚未产生线程挂起竞争）
+                this.currentTask = task;
+                this.lastReadBytes = null;
+                success = false;
 
-                    // String hexData = HexUtils.bytesToHexString(task.getWriteBytes());
-                    if (retries == initialRetryCount) {
-                        // System.out.println("[CommDispatcher] [首次写入] 数据: " + hexData);
-                    } else {
-                        // System.out.println("[CommDispatcher] [第 " + (initialRetryCount - retries) + " 次重试] 数据: " + hexData);
+                // 3. 执行物理层数据写入（无锁状态下进行，防止耗时 I/O 拖垮接收线程）
+                try {
+                    write(task);
+                } catch (Exception ex) {
+                    System.err.println("通信写入异常: " + ex.getMessage());
+                    this.currentTask = null; // 发生异常及时清空
+
+                    // 此时线程未持有锁，调用 close 触发重连逻辑绝对安全，绝无死锁可能
+                    try {
+                        close();
+                    } catch (Exception ignore) {
                     }
 
-                    write(task);
+                    retries--;
+                    if (retries >= 0) {
+                        try {
+                            TimeUnit.MILLISECONDS.sleep(100);
+                        } catch (InterruptedException ignore) {
+                        }
+                    }
+                    continue; // 写入失败，直接跳转到下一次重试循环
+                }
 
-                    if (strategy == CommMode.WAIT_RESPONSE) {
+                // 4. 根据通信模式控制同步挂起
+                if (strategy == CommMode.WAIT_RESPONSE) {
+                    lock.lock(); // 【精准上锁】：只保护线程通知与条件流转
+                    try {
+                        // 【双重检查】：防止 write(task) 刚完成的间隙，硬件秒回导致 receive 线程已经把数据收完了
+                        if (this.lastReadBytes == null) {
+                            // 挂起当前发送线程，等待提取完完整帧后发出信号唤醒
+                            success = responseCondition.await(task.getTimeout(), TimeUnit.MILLISECONDS);
+                        } else {
+                            success = true;
+                        }
 
-                        success = responseCondition.await(task.getTimeout(), TimeUnit.MILLISECONDS);
                         if (success) {
                             responseData = this.lastReadBytes;
                             if (responseData == null || responseData.length == 0) {
@@ -277,37 +301,40 @@ public abstract class CommDispatcher {
                         } else {
                             System.err.println("[CommDispatcher] 等待响应超时 (Timeout: " + task.getTimeout() + "ms)");
                         }
-                    } else {
-                        success = true;
-                    }
-
-                    if (success) break;
-
-                } catch (Exception ex) {
-                    System.err.println("通信异常: " + ex.getMessage());
-                    try {
-                        close();
-                    } catch (Exception ignore) {
-                    }
-                } finally {
-                    this.currentTask = null;
-                    this.lastReadBytes = null;
-                    if (lock.isHeldByCurrentThread()) {
+                    } catch (InterruptedException e) {
+                        success = false;
+                        Thread.currentThread().interrupt(); // 保持中断状态
+                        System.err.println("[CommDispatcher] 等待响应被线程中断");
+                    } finally {
+                        // 在锁区间的最后，干净利落地清理状态并释放锁
+                        this.currentTask = null;
+                        this.lastReadBytes = null;
                         lock.unlock();
                     }
+                } else {
+                    // 如果是无响应模式（仅发送），写入成功即代表任务成功
+                    success = true;
+                    this.currentTask = null;
                 }
 
+                // 5. 任务执行成功，直接跳出重试循环
+                if (success) {
+                    break;
+                }
+
+                // 6. 任务失败且还有重试机会，执行指数退避等待
                 retries--;
-                if (!success && retries >= 0) {
+                if (retries >= 0) {
                     try {
                         long backoffTime = 50 + (initialRetryCount - retries) * 30;
-                        System.out.println("[CommDispatcher] 重试前等待 " + backoffTime + "ms");
+                        System.out.println("[CommDispatcher] 重试前退避等待 " + backoffTime + "ms");
                         TimeUnit.MILLISECONDS.sleep(backoffTime);
                     } catch (InterruptedException ignore) {
                     }
                 }
             }
 
+            // 7. 触发业务响应回调
             if (task.getDataReceived() != null) {
                 try {
                     task.getDataReceived().accept(responseData, task.getWriteBytes());
@@ -316,19 +343,16 @@ public abstract class CommDispatcher {
                 }
             }
 
-            // 在任务之间添加间隔，避免设备处理不过来
-            if (device.getWriteIntervalTime() > 0) {
-                long intervalStart = System.currentTimeMillis();
+            // 8. 指令间隙控制，防止频繁刷包导致硬件缓冲区爆满
+            if (device != null && device.getWriteIntervalTime() > 0) {
                 try {
                     Thread.sleep(device.getWriteIntervalTime());
                 } catch (InterruptedException ignore) {
                 }
-                // long actualInterval = System.currentTimeMillis() - intervalStart;
-                // System.out.println("[CommDispatcher] 实际间隔时间: " + actualInterval + "ms");
             }
         }
 
-        // 队列清空后的通知
+        // 9. 全局任务队列清空事件通知
         if (onAllTasksCompleted != null) {
             try {
                 onAllTasksCompleted.run();
@@ -340,25 +364,39 @@ public abstract class CommDispatcher {
 
     /**
      * 核心接收逻辑
+     * 无论收到的是断包还是粘包，一律先交由设备层缓冲区进行完整帧提取
      *
-     * @param readBytes
+     * @param readBytes 驱动或物理层直接上报的裸数据碎包
      */
     public void receive(byte[] readBytes) {
-        if (device == null || !device.validate(readBytes)) return;
+        if (device == null || readBytes == null || readBytes.length == 0) return;
 
+        // 1. 底层不做任何强校验和匹配，直接喂给 device 拼接并提取完整帧
+        // 2. 传入 Lambda 回调：一旦 device 拼出了一帧完整的 frame，立刻回调 handleCompleteFrame
+        device.onRawBytesReceived(readBytes, this::handleCompleteFrame);
+    }
+
+    private void handleCompleteFrame(byte[] frame, Void ignored) {
         lock.lock();
         try {
+            // 判定是否为当前等待的响应
             if (this.currentTask != null) {
-                if (device.isMatch(this.currentTask.getWriteBytes(), readBytes)) {
-                    this.lastReadBytes = readBytes;
-                    responseCondition.signalAll();
-                    return;
+                if (device.isMatch(this.currentTask.getWriteBytes(), frame)) {
+                    this.lastReadBytes = frame;
+                    responseCondition.signalAll(); // 唤醒同步等待
+                    return; // 匹配成功，生命周期结束
                 }
             }
         } finally {
             lock.unlock();
         }
-        device.receive(readBytes, null);
+
+        // 2. 匹配失败，百分之百是设备自己上报的数据,调用主动上报接口
+        try {
+            device.onAutoReport(frame);
+        } catch (Exception e) {
+            System.err.println("[Dispatcher] 业务层处理主动上报异常: " + e.getMessage());
+        }
     }
 
     /**

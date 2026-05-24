@@ -13,18 +13,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 /**
  * 称重货架
  */
 public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
-    
-    /**
-     * 接收缓冲区，用于处理TCP粘包/拆包
-     */
-    private java.io.ByteArrayOutputStream receiveBuffer = new java.io.ByteArrayOutputStream();
-    
+
     @Override
     public void setCommDispatcher(CommDispatcher comm) {
         super.setCommDispatcher(comm);
@@ -32,67 +28,66 @@ public class LoadCellShelfDevice extends DeviceCore implements IFrameProtocol {
     }
 
     /**
-     * 重写receive方法，在设备层实现帧分割逻辑
-     * 协议规则：
-     * 1. 读取命令响应以 \r\n (0x0D 0x0A) 结尾
-     * 2. 设置命令响应为 2 字节：地址 + 0x30(成功) 或 0x31(失败)
+     * 健壮版帧解析滚动引擎（自带滑动垃圾剔除与防挤压熔断）
      */
     @Override
-    public void receive(byte[] readBytes, byte[] writeBytes) {
-        // 将接收到的数据添加到缓冲区
-        for (byte b : readBytes) {
-            receiveBuffer.write(b);
+    protected void parseFrame(BiConsumer<byte[], Void> onFrameReady) {
+
+        // 硬上限防爆。如果积压超过 4KB 仍无法解析，说明全是脏数据，强行熔断清空
+        if (receiveBuffer.size() > 4096) {
+            System.err.println("[Device] 警告：缓冲区严重挤压达 " + receiveBuffer.size() + " 字节，触发硬熔断强行清空！");
+            receiveBuffer.reset();
+            return;
         }
-        
-        // 检查缓冲区是否有完整帧
-        processBufferedData(writeBytes);
-    }
-    
-    /**
-     * 处理缓冲区中的数据，提取完整帧
-     * @param writeBytes 当前请求的写入数据（用于日志）
-     */
-    private void processBufferedData(byte[] writeBytes) {
-        while (receiveBuffer.size() > 0) {
+
+        while (receiveBuffer.size() >= 2) {
             byte[] currentData = receiveBuffer.toByteArray();
             int bufLen = currentData.length;
-            
+
             boolean isCompleteFrame = false;
             int frameLength = 0;
-            
-            // 规则1: 检测帧尾 (最后一个是 0x0A, 倒数第二个可以是任何值，通常是 0x0D)
-            // 这样可以兼容 0D 0A, 8D 0A, 0C 0A 等情况
-            if (bufLen >= 2 && currentData[bufLen - 1] == (byte)0x0A) {
-                isCompleteFrame = true;
-                frameLength = bufLen;
+
+            // 1. 扫描第一个 0x0A
+            int indexOf0A = -1;
+            for (int i = 0; i < bufLen; i++) {
+                if (currentData[i] == (byte) 0x0A) {
+                    indexOf0A = i;
+                    break;
+                }
             }
-            // 规则2: 检测设置命令响应 (2字节: 地址 + 0x30/0x31)
-            else if (bufLen >= 2 && 
-                     (currentData[1] == (byte)0x30 || currentData[1] == (byte)0x31)) {
+
+            if (indexOf0A != -1) {
+                isCompleteFrame = true;
+                frameLength = indexOf0A + 1;
+            }
+            // 2. 检测设置命令响应 (2字节)
+            else if (currentData[1] == (byte) 0x30 || currentData[1] == (byte) 0x31) {
                 isCompleteFrame = true;
                 frameLength = 2;
             }
-            
+
+            // 核心裁剪、分流、与滑动丢弃逻辑
             if (isCompleteFrame) {
-                // 提取完整帧
+                // 正常提取完整帧
                 byte[] frame = new byte[frameLength];
                 System.arraycopy(currentData, 0, frame, 0, frameLength);
-                
-                // 移除已处理的数据
-                byte[] remaining = new byte[bufLen - frameLength];
-                if (remaining.length > 0) {
-                    System.arraycopy(currentData, frameLength, remaining, 0, remaining.length);
-                }
+
+                int remainingLen = bufLen - frameLength;
                 receiveBuffer.reset();
-                if (remaining.length > 0) {
-                    receiveBuffer.write(remaining, 0, remaining.length);
+                if (remainingLen > 0) {
+                    receiveBuffer.write(currentData, frameLength, remainingLen);
                 }
-                
-                // 调用父类的receive处理完整帧
-                super.receive(frame, writeBytes);
+
+                if (validate(frame)) {
+                    onFrameReady.accept(frame, null);
+                }
             } else {
-                // 没有完整帧，退出循环等待更多数据
-                break;
+                // 防挤压滑动门,主动把缓冲区的第一个字节扔掉，让队列往前“滑”一步
+                int remainingLen = bufLen - 1;
+                receiveBuffer.reset();
+                if (remainingLen > 0) {
+                    receiveBuffer.write(currentData, 1, remainingLen);
+                }
             }
         }
     }
