@@ -1,7 +1,6 @@
 package device.channel;
 
 import com.fazecast.jSerialComm.SerialPort;
-import device.channel.CommChannel;
 
 import java.io.IOException;
 

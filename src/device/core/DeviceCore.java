@@ -14,10 +14,6 @@ import java.util.function.BiFunction;
 
 public class DeviceCore {
     public static DeviceCore instance = new DeviceCore();
-    /**
-     * 接收缓冲区
-     */
-    protected final java.io.ByteArrayOutputStream receiveBuffer = new java.io.ByteArrayOutputStream();
 
     /**
      * 通信调度器
@@ -45,10 +41,6 @@ public class DeviceCore {
 
     public Charset getCharset() {
         return this.commDispatcher.getCharset();
-    }
-
-    public String getName() {
-        return this.commDispatcher.getName();
     }
 
     public void setTimeout(int timeout) {
@@ -130,10 +122,6 @@ public class DeviceCore {
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, 0, timeout, dataReceived);
     }
 
-    public void write(byte[] writeBytes, int retryCount, long timeout, BiConsumer<byte[], byte[]> dataReceived) {
-        this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, retryCount, timeout, dataReceived);
-    }
-
     /**
      * 写入数据
      *
@@ -170,63 +158,43 @@ public class DeviceCore {
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, retryCount, timeout, dataReceived);
     }
 
-    /**
-     * 写入数据同步获取结果
-     *
-     * @param frameBytes 待发送的byte数组
-     * @param retryCount 重试此时
-     * @param timeout    单次响应超时时间
-     * @param parser     结果解析器
-     * @param <T>        返回的结果类型
-     * @return
-     * @throws Exception
-     */
-    public <T> T writeSync(byte[] frameBytes, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+    public <T> T writeSync(String frameASCII, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+
         CompletableFuture<T> future = new CompletableFuture<>();
-        this.write(frameBytes, retryCount, timeout, (readBytes, writeBytes) -> {
-            if (readBytes == null) {
-                future.completeExceptionally(new java.io.IOException("设备响应超时，重试耗尽"));
-            } else {
-                try {
-                    T result = parser.apply(readBytes, writeBytes);
-                    future.complete(result);
-                } catch (Exception e) {
-                    future.completeExceptionally(e);
-                }
+
+        this.write(frameASCII, timeout, (readBytes, writeBytes) -> {
+            try {
+                T result = parser.apply(readBytes, writeBytes);
+                future.complete(result);
+            } catch (Exception e) {
+                future.completeExceptionally(e);
             }
         });
-        return future.get();
+
+        return future.get(timeout, TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * 写入 ASCII 数据同步获取结果
-     *
-     * @param frameASCII 待发送的 ASCII 字符串
-     * @param retryCount 重试次数
-     * @param timeout    单次响应超时时间
-     * @param parser     结果解析器
-     * @param <T>        返回的结果类型
-     * @return 解析后的业务对象
-     * @throws Exception 通信超时或解析异常
-     */
     public <T> T writeSync(String frameASCII, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
 
-        CompletableFuture<T> future = new CompletableFuture<>();
+        CompletableFuture<T> future =
+                new CompletableFuture<>();
 
         this.write(frameASCII, retryCount, timeout, (readBytes, writeBytes) -> {
-            if (readBytes == null) {
-                future.completeExceptionally(new java.io.IOException("设备响应超时，重试耗尽"));
-            } else {
-                try {
-                    T result = parser.apply(readBytes, writeBytes);
-                    future.complete(result);
-                } catch (Exception e) {
-                    future.completeExceptionally(e);
-                }
+
+            try {
+
+                T result = parser.apply(readBytes, writeBytes);
+
+                future.complete(result);
+
+            } catch (Exception e) {
+
+                future.completeExceptionally(e);
             }
+
         });
 
-        return future.get();
+        return future.get((retryCount + 1) * timeout, TimeUnit.MILLISECONDS);
     }
 
 
@@ -237,7 +205,10 @@ public class DeviceCore {
      * @return
      */
     public boolean validate(byte[] readBytes) {
-        return readBytes != null && readBytes.length > 0;
+        if (readBytes == null || readBytes.length < 1) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -253,52 +224,16 @@ public class DeviceCore {
     }
 
     /**
-     * 通信调度器收到裸数据时，首先调用此方法
+     * 接收到设备发过来的数据时调用此方法
      *
-     * @param readBytes    裸数据碎包
-     * @param onFrameReady 拼好完整帧后的回调执行器
+     * @param readBytes  读取到的设备数据
+     * @param writeBytes 写入到设备的数据
      */
-    public void onRawBytesReceived(byte[] readBytes, BiConsumer<byte[], Void> onFrameReady) {
-        if (readBytes == null || readBytes.length == 0) return;
-
-        synchronized (receiveBuffer) {
-            // 无条件将零碎的字节流灌入缓冲区
-            try {
-                receiveBuffer.write(readBytes);
-            } catch (IOException ignored) {
-            }
-
-            // 调用帧驱动解析引擎
-            parseFrame(onFrameReady);
-        }
-    }
-
-    /**
-     * 帧解析核心引擎 - 基类默认实现
-     * 如果子类不重写，默认不处理
-     * 具体的设备子类根据协议重写逻辑
-     */
-    protected void parseFrame(BiConsumer<byte[], Void> onFrameReady) {
-        if (receiveBuffer.size() > 0) {
-            byte[] frame = receiveBuffer.toByteArray();
-            receiveBuffer.reset();
-            if (validate(frame)) {
-                onFrameReady.accept(frame, null);
-            }
-        }
-    }
-
-    /**
-     * 主动上报完整帧
-     * 当一帧完整的数据被调度器判定为非响应数据时，由调度器最终触发
-     *
-     * @param frame 绝对完整的一帧数据
-     */
-    public void onAutoReport(byte[] frame) {
-        // 基类做默认的日志输出
+    public void receive(byte[] readBytes, byte[] writeBytes) {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
         String now = LocalDateTime.now().format(formatter);
-        System.out.println("[" + now + "]收到全局未拦截的主动上报帧: " + HexUtils.bytesToHexString(frame));
+
+        System.out.println(now + " 被标记为主动上报的帧:" + HexUtils.bytesToHexString(readBytes));
     }
 
     /**

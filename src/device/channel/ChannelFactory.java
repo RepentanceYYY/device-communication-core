@@ -31,8 +31,6 @@ public class ChannelFactory {
                 return new TcpServerChannel(
                         config.getPort()
                 );
-            case UDP:
-                return new UdpChannel(config.getLocalPort());
 
             default:
                 throw new IllegalArgumentException("不支持的通道类型: " + config.getType());

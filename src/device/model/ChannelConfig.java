@@ -8,13 +8,8 @@ import device.enums.ChannelType;
 public class ChannelConfig {
     private ChannelType type;
 
-    /**
-     * 串口号
-     */
+    // 串口参数
     private String portName;
-    /**
-     * 波特率
-     */
     private int baudRate;
 
     // TCP参数

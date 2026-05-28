@@ -4,7 +4,6 @@ import device.enums.CommMode;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
-import java.util.function.Function;
 
 public class Task implements Comparable<Task> {
     /**

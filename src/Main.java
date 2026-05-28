@@ -1,4 +1,4 @@
-import device.LoadCellShelf.LoadCellShelfDevice;
+import device.LoadCellShelf.ShelfDevice;
 import device.channel.ChannelFactory;
 import device.channel.TcpClientChannel;
 import device.core.TcpClientDispatcher;
@@ -10,10 +10,10 @@ public class Main {
 
         ChannelConfig config = new ChannelConfig();
         config.setType(ChannelType.TCP_CLIENT);
-        config.setHost("116.25.92.54");
+        config.setHost("192.168.1.114");
         config.setPort(8234);
 
-        LoadCellShelfDevice device = new LoadCellShelfDevice();
+        ShelfDevice device = new ShelfDevice();
 
         TcpClientDispatcher dispatcher = new TcpClientDispatcher((TcpClientChannel) ChannelFactory.create(config));
 
@@ -23,14 +23,10 @@ public class Main {
 
         device.setWriteIntervalTime(130L);
         device.open();
-        for (int i = 0; i < 10; i++) {
-            Thread.sleep(1000L);
-            long start = System.currentTimeMillis();
-            for (int j = 1; j <= 7; j++) {
-                System.out.println(j+": "+device.getQuantitySync(j));
-            }
-            long end = System.currentTimeMillis();
-            System.out.println("------------------ 总耗时：" + (end - start) + " ms");
+        try{
+            device.clearQuantityIssuedSync(3);
+        } catch (Exception e) {
+            System.out.println("Main：错误消息"+e.getMessage());
         }
     }
 }
