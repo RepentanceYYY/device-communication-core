@@ -24,7 +24,7 @@ public class Main {
         device.setWriteIntervalTime(130L);
         device.open();
         try{
-            device.clearQuantityIssuedSync(3);
+            device.clearQuantityIssuedSync(100);
         } catch (Exception e) {
             System.out.println("Main：错误消息"+e.getMessage());
         }
