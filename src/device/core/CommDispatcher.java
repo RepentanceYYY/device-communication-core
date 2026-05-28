@@ -246,12 +246,15 @@ public abstract class CommDispatcher {
             byte[] responseData = null;
             CommMode strategy = task.getActionStrategy();
 
+            // ⭐ 新增：用于记录最后一次发生的异常（无论是通信超时还是业务校验失败）
+            Exception lastException = null;
+
             while (retries >= 0) {
                 if (!isOpen()) {
                     try {
                         open();
                     } catch (IOException e) {
-                        System.err.println("连接打开失败: " + e.getMessage());
+                        lastException = e; // 记录异常
                         retries--;
                         try {
                             TimeUnit.MILLISECONDS.sleep(200);
@@ -266,35 +269,46 @@ public abstract class CommDispatcher {
                     this.currentTask = task;
                     this.lastReadBytes = null;
 
-                     String hexData = HexUtils.bytesToHexString(task.getWriteBytes());
+                    String hexData = HexUtils.bytesToHexString(task.getWriteBytes());
                     if (retries == initialRetryCount) {
                         System.out.println("[" + Thread.currentThread().getName() + "] [首次写入] TaskID: " + System.identityHashCode(task) + " 数据: " + hexData);
                     } else {
-                         System.out.println("[CommDispatcher] [第 " + (initialRetryCount - retries) + " 次重试] 数据: " + hexData);
+                        System.out.println("[CommDispatcher] [第 " + (initialRetryCount - retries) + " 次重试] 数据: " + hexData);
                     }
 
                     write(task);
 
                     if (strategy == CommMode.WAIT_RESPONSE) {
-
-                        success = responseCondition.await(task.getTimeout(), TimeUnit.MILLISECONDS);
-                        if (success) {
+                        // 1. 等待底层物理响应
+                        boolean hasResponse = responseCondition.await(task.getTimeout(), TimeUnit.MILLISECONDS);
+                        if (hasResponse) {
                             responseData = this.lastReadBytes;
                             if (responseData == null || responseData.length == 0) {
-                                success = false;
-                                System.err.println("[CommDispatcher] 收到空响应");
+                                throw new RuntimeException("设备响应了空数据");
                             }
+
+                            // 2. ⭐【关键改动】收到数据后，立刻在锁内/循环内尝试通过业务回调进行校验
+                            if (task.getDataReceived() != null) {
+                                // 这里触发业务层的解析
+                                task.getDataReceived().accept(responseData, task.getWriteBytes());
+                            }
+
+                            // 如果上面的 accept() 抛出了异常，代码会直接跳到下面的 catch 块，不会执行到 success = true
+                            success = true;
+
                         } else {
-                            System.err.println("[CommDispatcher] 等待响应超时 (Timeout: " + task.getTimeout() + "ms)");
+                            throw new RuntimeException("设备响应超时");
                         }
                     } else {
                         success = true;
                     }
 
-                    if (success) break;
-
                 } catch (Exception ex) {
-                    System.err.println("通信异常: " + ex.getMessage());
+                    // 捕获到了异常（可能是超时，也可能是业务回调里抛出的“数据非法异常”）
+                    success = false;
+                    lastException = ex; // 记录最后一次的异常
+                    System.err.println("[CommDispatcher] 本次执行失败原因: " + ex.getMessage());
+
                     try {
                         close();
                     } catch (Exception ignore) {
@@ -307,8 +321,12 @@ public abstract class CommDispatcher {
                     }
                 }
 
+                // 如果成功了，直接退出重试循环
+                if (success) break;
+
+                // 失败了，扣减重试次数，触发退避延时
                 retries--;
-                if (!success && retries >= 0) {
+                if (retries >= 0) {
                     try {
                         long backoffTime = 50 + (initialRetryCount - retries) * 30;
                         System.out.println("[CommDispatcher] 重试前等待 " + backoffTime + "ms");
@@ -318,27 +336,14 @@ public abstract class CommDispatcher {
                 }
             }
 
-            if (task.getDataReceived() != null) {
-                try {
-                    task.getDataReceived().accept(responseData, task.getWriteBytes());
-                } catch (Exception e) {
-                    System.err.println("回调异常: " + e.getMessage());
-                }
-            }
-
-            // 在任务之间添加间隔，避免设备处理不过来
-            if (device.getWriteIntervalTime() > 0) {
-                long intervalStart = System.currentTimeMillis();
-                try {
-                    Thread.sleep(device.getWriteIntervalTime());
-                } catch (InterruptedException ignore) {
-                }
-                // long actualInterval = System.currentTimeMillis() - intervalStart;
-                // System.out.println("[CommDispatcher] 实际间隔时间: " + actualInterval + "ms");
+            // ⭐ 循环完全结束后，通过一种机制把最终的结果（成功或最后的异常）通知给最上层的 Future
+            // 我们可以在 Task 中专门包裹一个通知包装器，或者直接利用原有的数据流传
+            // 为了配合 writeSync，我们需要把最后的异常或者成功状态传回
+            if (task.getDataReceived() instanceof DeviceCore.CommCallbackWrapper) {
+                ((DeviceCore.CommCallbackWrapper) task.getDataReceived()).notifyFinalResult(success, lastException);
             }
         }
 
-        // 队列清空后的通知
         if (onAllTasksCompleted != null) {
             try {
                 onAllTasksCompleted.run();
@@ -349,26 +354,37 @@ public abstract class CommDispatcher {
     }
 
     /**
-     * 核心接收逻辑
-     *
-     * @param readBytes
+     * 核心接收逻辑：只做分发，不做任何匹配
      */
     public void receive(byte[] readBytes) {
         if (device == null || !device.validate(readBytes)) return;
 
+        // 交给设备层去解析帧
+        device.onRawDataReceived(readBytes);
+    }
+
+    /**
+     * 处理完整帧
+     *
+     * @param completeFrame
+     */
+    public void handleCompleteFrame(byte[] completeFrame) {
         lock.lock();
         try {
             if (this.currentTask != null) {
-                if (device.isMatch(this.currentTask.getWriteBytes(), readBytes)) {
-                    this.lastReadBytes = readBytes;
-                    responseCondition.signalAll();
+                // 用完整的、干净的帧去跟当前发送的指令做 match 强校验
+                if (device.isMatch(this.currentTask.getWriteBytes(), completeFrame)) {
+                    this.lastReadBytes = completeFrame;
+                    responseCondition.signalAll(); // 匹配成功，精准唤醒发送线程
                     return;
                 }
             }
         } finally {
             lock.unlock();
         }
-        device.receive(readBytes, null);
+
+        // 如果没有当前任务，或者当前任务没 match 上，说明是设备主动发上来的数据
+        device.onDeviceReported(completeFrame, null);
     }
 
     /**

@@ -10,8 +10,8 @@ public class Main {
 
         ChannelConfig config = new ChannelConfig();
         config.setType(ChannelType.TCP_CLIENT);
-        config.setHost("192.168.1.114");
-        config.setPort(8234);
+        config.setHost("113.90.135.198");
+        config.setPort(8235);
 
         ShelfDevice device = new ShelfDevice();
 
@@ -22,11 +22,16 @@ public class Main {
         dispatcher.setDeviceBase(device);
 
         device.setWriteIntervalTime(130L);
-        device.open();
-        try{
-            device.clearQuantityIssuedSync(100);
+        try {
+            Boolean res = device.clearQuantityIssuedSync(10);
         } catch (Exception e) {
-            System.out.println("Main：错误消息"+e.getMessage());
+            System.out.println("main捕获到错误消息:" + e.getMessage());
+        }
+
+        try {
+            Boolean res = device.clearQuantityIssuedSync(3);
+        } catch (Exception e) {
+            System.out.println("main捕获到错误消息:" + e.getMessage());
         }
     }
 }

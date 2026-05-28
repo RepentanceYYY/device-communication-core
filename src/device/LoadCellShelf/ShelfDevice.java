@@ -8,6 +8,7 @@ import device.utils.ByteUtils;
 import device.utils.HexUtils;
 import device.utils.StringUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -18,84 +19,12 @@ import java.util.List;
  */
 public class ShelfDevice extends DeviceCore implements IFrameProtocol {
 
-    /**
-     * 接收缓冲区，用于处理TCP粘包/拆包
-     */
-    private java.io.ByteArrayOutputStream receiveBuffer = new java.io.ByteArrayOutputStream();
-
-
     @Override
     public void setCommDispatcher(CommDispatcher comm) {
         super.setCommDispatcher(comm);
         comm.responseTimeout = 1500;
     }
 
-    /**
-     * 重写receive方法，在设备层实现帧分割逻辑
-     * 协议规则：
-     * 1. 读取命令响应以 \r\n (0x0D 0x0A) 结尾
-     * 2. 设置命令响应为 2 字节：地址 + 0x30(成功) 或 0x31(失败)
-     */
-    @Override
-    public void receive(byte[] readBytes, byte[] writeBytes) {
-        // 将接收到的数据添加到缓冲区
-        for (byte b : readBytes) {
-            receiveBuffer.write(b);
-        }
-
-        // 检查缓冲区是否有完整帧
-        processBufferedData(writeBytes);
-    }
-
-    /**
-     * 处理缓冲区中的数据，提取完整帧
-     *
-     * @param writeBytes 当前请求的写入数据（用于日志）
-     */
-    private void processBufferedData(byte[] writeBytes) {
-        while (receiveBuffer.size() > 0) {
-            byte[] currentData = receiveBuffer.toByteArray();
-            int bufLen = currentData.length;
-
-            boolean isCompleteFrame = false;
-            int frameLength = 0;
-
-            // 规则1: 检测帧尾 (最后一个是 0x0A, 倒数第二个可以是任何值，通常是 0x0D)
-            // 这样可以兼容 0D 0A, 8D 0A, 0C 0A 等情况
-            if (bufLen >= 2 && currentData[bufLen - 1] == (byte) 0x0A) {
-                isCompleteFrame = true;
-                frameLength = bufLen;
-            }
-            // 规则2: 检测设置命令响应 (2字节: 地址 + 0x30/0x31)
-            else if (bufLen >= 2 &&
-                    (currentData[1] == (byte) 0x30 || currentData[1] == (byte) 0x31)) {
-                isCompleteFrame = true;
-                frameLength = 2;
-            }
-
-            if (isCompleteFrame) {
-                // 提取完整帧
-                byte[] frame = new byte[frameLength];
-                System.arraycopy(currentData, 0, frame, 0, frameLength);
-
-                // 移除已处理的数据
-                byte[] remaining = new byte[bufLen - frameLength];
-                if (remaining.length > 0) {
-                    System.arraycopy(currentData, frameLength, remaining, 0, remaining.length);
-                }
-                receiveBuffer.reset();
-                if (remaining.length > 0) {
-                    receiveBuffer.write(remaining, 0, remaining.length);
-                }
-
-                // 调用父类的receive处理完整帧
-                super.receive(frame, writeBytes);
-            } else {
-                // 没有完整帧，退出循环等待更多数据
-                break;
-            }
-        }
-    }
 
     /**
      * 批量读取数量
@@ -357,17 +286,13 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
         String ascii = String.format("%02d", address) + "clrget";
         try {
             return this.writeSync(ascii, 2, 500L, (readBytes, writeBytes) -> {
-                System.out.println("进入回调");
-                if (readBytes == null) {
-                    throw new RuntimeException("清空领用数量设备响应超时");
-                }
                 if (readBytes.length != 2) {
-                    throw new RuntimeException("清空领用数量设备响应数据非法，数据为：" + HexUtils.bytesToHexString(readBytes));
+                    throw new RuntimeException("清空领用数量设备响应的数据非法，数据为：" + HexUtils.bytesToHexString(readBytes));
                 }
                 if (readBytes[1] == (byte) 0x30) {
                     return true;
                 } else {
-                    throw new RuntimeException("清空领用数量设备响应数据非法，数据为：" + HexUtils.bytesToHexString(readBytes));
+                    throw new RuntimeException("清空领用数量设备响应的数据非法，数据为：" + HexUtils.bytesToHexString(readBytes));
                 }
             });
         } catch (Exception ex) {
@@ -387,7 +312,7 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
 
         String ascii = String.format("%02d", address) + "limdn 0," + lowerLimit;
 
-        return writeSync(ascii, 1000L, (readBytes, writeBytes) -> {
+        return writeSync(ascii, 0, 1000L, (readBytes, writeBytes) -> {
 
             if (readBytes == null) {
                 throw new RuntimeException("设置库存下限超时");
@@ -416,7 +341,7 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
 
         String ascii = String.format("%02d", address) + "limup 0," + upperLimit;
 
-        return writeSync(ascii, 1000L, (readBytes, writeBytes) -> {
+        return writeSync(ascii, 0, 1000L, (readBytes, writeBytes) -> {
 
             if (readBytes == null) {
                 throw new RuntimeException("设置库存上限超时");
@@ -719,6 +644,74 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
             }
             return true;
         });
+    }
+
+    /**
+     * 剪切成完整帧
+     *
+     * @param buffer
+     * @return
+     */
+    @Override
+    protected List<byte[]> splitFrames(ByteArrayOutputStream buffer) {
+        List<byte[]> frames = new ArrayList<>();
+
+        // 防止内存被乱码撑爆
+        if (buffer.size() > 5 * 1024) {
+            System.err.println("[DeviceSecurity]警告：接收缓冲区积压已达 " + buffer.size()
+                    + " 字节，超过5KB上限！疑似协议错乱或遭遇持续乱码干扰，执行强行清空。");
+            buffer.reset(); // 直接放弃所有缓存，丢弃垃圾数据
+            return frames;  // 返回空列表，终止本次处理
+        }
+
+        // 只要缓冲区有数据，就持续尝试拆帧
+        while (buffer.size() > 0) {
+            byte[] currentData = buffer.toByteArray();
+            int bufLen = currentData.length;
+
+            boolean isCompleteFrame = false;
+            int frameLength = 0;
+
+            // 规则1：从前往后找第一个 0x0A
+            int indexOf0A = -1;
+            for (int i = 0; i < bufLen; i++) {
+                if (currentData[i] == (byte) 0x0A) {
+                    indexOf0A = i;
+                    break;
+                }
+            }
+
+            // 如果找到了 0x0A 且它前面至少还有一个字节（满足长度 >= 2 的安全限制）
+            if (indexOf0A >= 1) {
+                isCompleteFrame = true;
+                frameLength = indexOf0A + 1; // 帧长度包含 0x0A 本身
+            }
+            // 规则2: 检测设置命令响应 (2字节: 地址 + 0x30/0x31)
+            else if (bufLen >= 2 && (currentData[1] == (byte) 0x30 || currentData[1] == (byte) 0x31)) {
+                isCompleteFrame = true;
+                frameLength = 2;
+            }
+
+            // 如果判定成功，切分缓冲区
+            if (isCompleteFrame) {
+                // 提取完整帧
+                byte[] frame = new byte[frameLength];
+                System.arraycopy(currentData, 0, frame, 0, frameLength);
+                frames.add(frame);
+
+                // 移除已处理的数据，更新缓冲区
+                buffer.reset();
+                int remainLen = bufLen - frameLength;
+                if (remainLen > 0) {
+                    buffer.write(currentData, frameLength, remainLen);
+                }
+            } else {
+                // 既没有找到 0x0A，也不符合两字节的设置响应，数据不全，退出循环等待更多碎包
+                break;
+            }
+        }
+
+        return frames;
     }
 
 
