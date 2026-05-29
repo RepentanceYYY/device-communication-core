@@ -246,7 +246,7 @@ public abstract class CommDispatcher {
             byte[] responseData = null;
             CommMode strategy = task.getActionStrategy();
 
-            // ⭐ 新增：用于记录最后一次发生的异常（无论是通信超时还是业务校验失败）
+            // 用于记录最后一次发生的异常（无论是通信超时还是业务校验失败）
             Exception lastException = null;
 
             while (retries >= 0) {
@@ -287,7 +287,7 @@ public abstract class CommDispatcher {
                                 throw new RuntimeException("设备响应了空数据");
                             }
 
-                            // 2. ⭐【关键改动】收到数据后，立刻在锁内/循环内尝试通过业务回调进行校验
+                            // 收到数据后，立刻在锁内/循环内尝试通过业务回调进行校验
                             if (task.getDataReceived() != null) {
                                 // 这里触发业务层的解析
                                 task.getDataReceived().accept(responseData, task.getWriteBytes());
@@ -328,22 +328,26 @@ public abstract class CommDispatcher {
                 retries--;
                 if (retries >= 0) {
                     try {
-                        long backoffTime = 50 + (initialRetryCount - retries) * 30;
+                        long backoffTime = 20 + (initialRetryCount - retries) * 30;
                         System.out.println("[CommDispatcher] 重试前等待 " + backoffTime + "ms");
                         TimeUnit.MILLISECONDS.sleep(backoffTime);
                     } catch (InterruptedException ignore) {
                     }
                 }
             }
-
-            // ⭐ 循环完全结束后，通过一种机制把最终的结果（成功或最后的异常）通知给最上层的 Future
-            // 我们可以在 Task 中专门包裹一个通知包装器，或者直接利用原有的数据流传
             // 为了配合 writeSync，我们需要把最后的异常或者成功状态传回
             if (task.getDataReceived() instanceof DeviceCore.CommCallbackWrapper) {
                 ((DeviceCore.CommCallbackWrapper) task.getDataReceived()).notifyFinalResult(success, lastException);
             }
         }
-
+        // 在任务之间添加间隔，避免设备处理不过来
+        if (device.getWriteIntervalTime() > 0) {
+            try {
+                Thread.sleep(device.getWriteIntervalTime());
+            } catch (InterruptedException ignore) {
+            }
+        }
+        // 队列执行完毕通知
         if (onAllTasksCompleted != null) {
             try {
                 onAllTasksCompleted.run();

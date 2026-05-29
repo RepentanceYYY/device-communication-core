@@ -236,35 +236,30 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
         String ascii = String.format("%02d", address) + "hdnum";
         try {
             return this.writeSync(ascii, 2, 500L, (readBytes, writeBytes) -> {
-                if (readBytes == null) {
-                    System.err.println("[getQuantitySync] 响应为null");
-                    return null;
-                }
                 // 至少需要：地址(1) + 状态(1) + 数据(1+) + 帧尾(2) = 5字节
                 // 帧尾通常是 0D 0A，但也可能是 8D 0A 等异常情况
                 if (readBytes.length < 5) {
-                    System.err.println("[getQuantitySync] 响应数据太短: " + readBytes.length + " bytes, 数据: " + HexUtils.bytesToHexString(readBytes));
-                    return null;
+                    throw new RuntimeException("响应数据太短: " + readBytes.length + " bytes, 数据: " + HexUtils.bytesToHexString(readBytes));
                 }
                 // 提取数据部分：从索引3开始，到倒数第3个字节结束（去掉最后2字节的帧尾）
                 // 例如：01 30 30 33 0D 0A -> 提取索引3的 33
                 int endIndex = readBytes.length - 3;  // 倒数第三个字节的索引
                 // 确保 startIndex <= endIndex
                 if (endIndex < 3) {
-                    return null;
+                    throw new RuntimeException("获取数据包结束索引失败: " + readBytes.length + " bytes, 数据: " + HexUtils.bytesToHexString(readBytes));
                 }
                 byte[] dataPackage = ByteUtils.slice(readBytes, 3, endIndex);
                 if (dataPackage == null || dataPackage.length == 0) {
-                    return null;
+                    throw new RuntimeException("获取数据包部分失败: " + readBytes.length + " bytes, 数据: " + HexUtils.bytesToHexString(readBytes));
                 }
                 String asciiString = new String(dataPackage, StandardCharsets.US_ASCII).trim();
                 if (asciiString.isEmpty()) {
-                    return null;  // 返回null会触发重试
+                    throw new RuntimeException("数据字节数组转成字符串为空: " + readBytes.length + " bytes, 数据: " + HexUtils.bytesToHexString(readBytes));
                 }
                 // 校验是否全为数字字符
                 for (char c : asciiString.toCharArray()) {
                     if (!Character.isDigit(c)) {
-                        return null;  // 返回null会触发重试
+                        throw new RuntimeException("数据有误: " + readBytes.length + " bytes, 数据: " + HexUtils.bytesToHexString(readBytes));
                     }
                 }
                 Integer value = Integer.parseInt(asciiString);
