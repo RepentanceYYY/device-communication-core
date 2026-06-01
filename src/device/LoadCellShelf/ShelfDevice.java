@@ -3,6 +3,7 @@ package device.LoadCellShelf;
 import device.core.CommDispatcher;
 import device.core.DeviceCore;
 import device.core.IFrameProtocol;
+import device.enums.DispatchMode;
 import device.model.PositionData;
 import device.utils.ByteUtils;
 import device.utils.HexUtils;
@@ -412,7 +413,7 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
         this.write(ascii, this::getReceiveNumberCallback);
     }
 
-    private void getReceiveNumberCallback(byte[] readBytes, byte[] writeBytes) {
+    public void getReceiveNumberCallback(byte[] readBytes, byte[] writeBytes) {
         super.callback(readBytes, writeBytes);
 
         // 1. 基础校验：仅进行最小必要的检查
@@ -431,7 +432,7 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
         boolean isPlanGreaterThanActual = (data & 0x08) != 0; // Bit 3
         boolean isPlanLessThanActual = (data & 0x10) != 0; // Bit 4
         boolean noWeightSensor = (data & 0x20) != 0; // Bit 5
-        boolean noPlanOperation = (data & 0x40) != 0; // Bit 6
+        boolean noPlanOperation = (data & 0x40) != 0; // Bit 61
         boolean isUpperLimitAlarm = isLowerLimitAlarm; // 原逻辑中这两个变量指向同一位
 
         // 4. 仅在需要打印调试信息时才创建 StringBuilder
@@ -447,6 +448,30 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
         sb.append("8. 计划取放货: ").append(noPlanOperation ? "无计划" : "有计划").append("\n");
 
         System.out.println(sb);
+    }
+
+    /**
+     * 写计划数量开始，结束
+     *
+     * @param address      屏幕地址
+     * @param operationTag true开始,false结束
+     * @param count        数量
+     * @return
+     * @throws Exception
+     */
+    public Boolean writerPlanCountBeginOrEndSync(int address, boolean operationTag, int count) throws Exception {
+        String ascii = StringUtils.join(String.format("%02d", address), "excnum ", operationTag == true ? "1" : "0", ",", count);
+        try {
+            return this.writeSync(ascii, DispatchMode.PRIORITY, 5, 0, 600L, (readBytes, writeBytes) -> {
+                if (readBytes.length < 2) throw new RuntimeException("设备回复字节数不够");
+                if (readBytes[1] != (byte) 0x30) {
+                    throw new RuntimeException("设备回复错误码");
+                }
+                return true;
+            });
+        } catch (Exception ex) {
+            throw ex;
+        }
     }
 
     /**
