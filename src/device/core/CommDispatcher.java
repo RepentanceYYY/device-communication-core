@@ -129,7 +129,7 @@ public abstract class CommDispatcher {
      *
      * @return
      */
-    private Task getDeviceActionModel() {
+    private Task pollNextTask() {
         Task task = priorityQueue.poll();
         if (task == null) {
             task = concurrentLinkedQueue.poll();
@@ -239,7 +239,7 @@ public abstract class CommDispatcher {
     private void processNextTask() {
         Task task;
 
-        while ((task = getDeviceActionModel()) != null) {
+        while ((task = pollNextTask()) != null) {
             int initialRetryCount = task.getRetryCount();
             int retries = initialRetryCount;
             boolean success = false;
@@ -307,7 +307,7 @@ public abstract class CommDispatcher {
                     // 捕获到了异常（可能是超时，也可能是业务回调里抛出的“数据非法异常”）
                     success = false;
                     lastException = ex; // 记录最后一次的异常
-                    System.err.println("[CommDispatcher] 本次执行失败原因: " + ex.getMessage());
+                    System.err.println("[CommDispatcher] 本次执行失败原因: " + ex.getMessage() + ",写入的数据为：" + HexUtils.bytesToHexString(task.getWriteBytes()));
 
                     try {
                         close();
@@ -339,14 +339,16 @@ public abstract class CommDispatcher {
             if (task.getDataReceived() instanceof DeviceCore.CommCallbackWrapper) {
                 ((DeviceCore.CommCallbackWrapper) task.getDataReceived()).notifyFinalResult(success, lastException);
             }
-        }
-        // 在任务之间添加间隔，避免设备处理不过来
-        if (device.getWriteIntervalTime() > 0) {
-            try {
-                Thread.sleep(device.getWriteIntervalTime());
-            } catch (InterruptedException ignore) {
+            // 在任务之间添加间隔，避免设备处理不过来
+            if (device.getWriteIntervalTime() > 0) {
+                try {
+                    Thread.sleep(device.getWriteIntervalTime());
+                    System.out.println("等待间隔");
+                } catch (InterruptedException ignore) {
+                }
             }
         }
+
         // 队列执行完毕通知
         if (onAllTasksCompleted != null) {
             try {
