@@ -8,6 +8,7 @@ import device.core.TcpClientDispatcher;
 import device.enums.ChannelType;
 import device.model.ChannelConfig;
 
+import java.sql.SQLOutput;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -26,6 +27,12 @@ public class Main {
         device.setCommDispatcher(dispatcher);
         dispatcher.setDeviceBase(device);
         device.setWriteIntervalTime(100L);
+        device.setSimulationMode(false);
         device.open();
+        try {
+            device.setBoxRangeSync(1,16,10000L);
+        } catch (Exception e) {
+            System.out.println("出现异常，消息为:" + e.getMessage());
+        }
     }
 }

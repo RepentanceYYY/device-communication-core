@@ -343,7 +343,6 @@ public abstract class CommDispatcher {
             if (device.getWriteIntervalTime() > 0) {
                 try {
                     Thread.sleep(device.getWriteIntervalTime());
-                    System.out.println("等待间隔");
                 } catch (InterruptedException ignore) {
                 }
             }

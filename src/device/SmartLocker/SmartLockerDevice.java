@@ -21,14 +21,41 @@ import java.util.function.Consumer;
  */
 public class SmartLockerDevice extends DeviceCore {
 
+    /**
+     * 发送和响应的固定针头
+     */
     private static final byte HEAD = (byte) 0x5A;
+    /**
+     * 开启指定箱门类型码
+     */
     private static final byte FUNC_OPEN_BOX = (byte) 0x21;
+    /**
+     * 查询箱门状态类型码
+     */
     private static final byte FUNC_QUERY_STATUS = (byte) 0x22;
+    /***
+     * 设置起始结束箱号类型码
+     */
     private static final byte FUNC_SET_BOX_RANGE = (byte) 0x23;
+    /**
+     * 查询箱门存物状态类型码
+     */
     private static final byte FUNC_QUERY_GOODS = (byte) 0x25;
+    /**
+     * 开启指定箱门响应index为1的字节
+     */
     private static final byte RESP_OPEN_BOX = (byte) 0xA1;
+    /**
+     * 查询箱门状态响应index为1的字节
+     */
     private static final byte RESP_QUERY_STATUS = (byte) 0xA2;
+    /**
+     * 设置起始结束箱号响应index为1的字节
+     */
     private static final byte RESP_SET_BOX_RANGE = (byte) 0xA3;
+    /**
+     * 查询箱门存物状态响应index为1的字节
+     */
     private static final byte RESP_QUERY_GOODS = (byte) 0xA5;
 
     private boolean simulationMode;          // 默认 false，由外部通过 setter 注入（配置文件 lock.simulation.mode）
@@ -131,6 +158,14 @@ public class SmartLockerDevice extends DeviceCore {
 
     // ======================== 同步 API ========================
 
+    /**
+     * 开启箱门锁
+     *
+     * @param boxNo   格口号
+     * @param timeout 超时时间
+     * @return
+     * @throws Exception
+     */
     public boolean openBoxSync(int boxNo, long timeout) throws Exception {
         if (simulationMode) {
             return simulateOpenBox(boxNo);
@@ -140,22 +175,76 @@ public class SmartLockerDevice extends DeviceCore {
         return result != null && result;
     }
 
+    /**
+     * 查询所有箱门锁状态
+     *
+     * @param timeout
+     * @return
+     * @throws Exception
+     */
     public BoxStatusData queryBoxStatusSync(long timeout) throws Exception {
         if (simulationMode) {
             return simulateBoxStatus();
         }
         byte[] frame = buildFrame(FUNC_QUERY_STATUS, new byte[0]);
+        System.out.println("查询所有箱门锁状态:" + HexUtils.bytesToHexString(frame));
         return writeSync(frame, 3, timeout, (readBytes, writeBytes) -> parseBoxStatusResponse(readBytes));
     }
 
-    public BoxGoodsData queryGoodsStatusSync(long timeout) throws Exception {
+    /**
+     * 查询指定格口号所在板子所有格口的箱门锁状态
+     *
+     * @param boxNo   格口号
+     * @param timeout 超时时间
+     * @return
+     * @throws Exception
+     */
+    public BoxStatusData queryBoxStatusSync(int boxNo, long timeout) throws Exception {
+        // 1. 动态拆分 int 为两个字节
+        byte highByte = (byte) ((boxNo >> 8) & 0xFF); // 右移 8 位，获取高 8 位
+        byte lowByte = (byte) (boxNo & 0xFF);         // 获取低 8 位
+
+        // 2. 组装成大端序（Big-Endian，高位在前）的数组
+        byte[] data = {highByte, lowByte};
+        if (simulationMode) {
+            return simulateBoxStatus();
+        }
+        byte[] frame = buildFrame(FUNC_QUERY_STATUS, data);
+        System.out.println("查询所有箱门锁状态:" + HexUtils.bytesToHexString(frame));
+        return writeSync(frame, 3, timeout, (readBytes, writeBytes) -> parseBoxStatusResponse(readBytes));
+    }
+
+    /**
+     * 查询指定格口号所在板子所有的格口号的储物状态
+     *
+     * @param boxNo   格口号
+     * @param timeout 超时时间
+     * @return
+     * @throws Exception
+     */
+    public BoxGoodsData queryGoodsStatusSync(int boxNo, long timeout) throws Exception {
+        // 1. 动态拆分 int 为两个字节
+        byte highByte = (byte) ((boxNo >> 8) & 0xFF); // 右移 8 位，获取高 8 位
+        byte lowByte = (byte) (boxNo & 0xFF);         // 获取低 8 位
+
+        // 2. 组装成大端序（Big-Endian，高位在前）的数组
+        byte[] data = {highByte, lowByte};
         if (simulationMode) {
             return simulateGoodsStatus();
         }
-        byte[] frame = buildFrame(FUNC_QUERY_GOODS, new byte[0]);
+        byte[] frame = buildFrame(FUNC_QUERY_GOODS, data);
         return writeSync(frame, 3, timeout, (readBytes, writeBytes) -> parseGoodsStatusResponse(readBytes));
     }
 
+    /**
+     * 设置单块板子起始和结束格口号(需要手动去点击板子上的按钮作为响应)
+     *
+     * @param startBox
+     * @param endBox
+     * @param timeout
+     * @return
+     * @throws Exception
+     */
     public boolean setBoxRangeSync(int startBox, int endBox, long timeout) throws Exception {
         if (simulationMode) {
             return simulateSetBoxRange(startBox, endBox);
@@ -237,13 +326,22 @@ public class SmartLockerDevice extends DeviceCore {
         return ((high & 0xFF) << 8) | (low & 0xFF);
     }
 
+    /**
+     * 解析打开锁响应
+     *
+     * @param response
+     * @return
+     */
     private boolean parseOpenBoxResponse(byte[] response) {
-        if (response == null || response.length < 4) return false;
-        if (response[0] != HEAD || response[1] != RESP_OPEN_BOX) return false;
-        return response[2] == 0;
+        if (response == null || response.length < 4)
+            throw new RuntimeException("开锁失败，响应数据为" + HexUtils.bytesToHexString(response));
+        if (response[0] != HEAD || response[1] != RESP_OPEN_BOX)
+            throw new RuntimeException("开锁失败，响应数据为" + HexUtils.bytesToHexString(response));
+        return response[2] == 0 ? true : false;
     }
 
-    private BoxStatusData parseBoxStatusResponse(byte[] response) {
+    protected BoxStatusData parseBoxStatusResponse(byte[] response) {
+        System.out.println("[查询所有门锁状态 receive]:" + HexUtils.bytesToHexString(response));
         if (response == null || response.length < 6) return null;
         if (response[0] != HEAD || response[1] != RESP_QUERY_STATUS) return null;
         int startBox = twoBytesToInt(response[2], response[3]);
@@ -257,7 +355,8 @@ public class SmartLockerDevice extends DeviceCore {
 
     private BoxGoodsData parseGoodsStatusResponse(byte[] response) {
         if (response == null || response.length < 6) return null;
-        if (response[0] != HEAD || response[1] != RESP_QUERY_GOODS) return null;
+        if (response[0] != HEAD || response[1] != RESP_QUERY_GOODS)
+            throw new RuntimeException("错误响应，数据为：" + HexUtils.bytesToHexString(response));
         int startBox = twoBytesToInt(response[2], response[3]);
         int endBox = twoBytesToInt(response[4], response[5]);
         int stateLen = response.length - 6 - 1;
@@ -332,6 +431,9 @@ public class SmartLockerDevice extends DeviceCore {
 
     // ======================== 内部数据类 ========================
 
+    /**
+     * 格口状态数据实体类
+     */
     public static class BoxStatusData {
         public final int startBox;
         public final int endBox;
@@ -343,13 +445,41 @@ public class SmartLockerDevice extends DeviceCore {
             this.stateBits = stateBits;
         }
 
+        /**
+         * 判断格口是否打开
+         *
+         * @param boxNo 格口号
+         * @return
+         */
         public boolean isOpen(int boxNo) {
             if (boxNo < startBox || boxNo > endBox) return false;
             int offset = boxNo - startBox;
+
+            // 因为是小端序，整个 byte 数组可以直接看作一个连续的低位到高位的比特流
             int byteIdx = offset / 8;
-            int bitIdx = offset % 8;
+            int bitIdx = offset % 8;  // offset=1 时，bitIdx=1
+
             if (byteIdx >= stateBits.length) return false;
+
+            // 【核心修正】
+            // 偏置小的格口在字节的右边（低 Bit 位）
+            // 比如 offset=1 (第2个格口) 时，我们取右数第二位 (bitIdx=1)
             return ((stateBits[byteIdx] >> bitIdx) & 0x01) == 1;
+        }
+
+        /**
+         * 判断是否全部格口都是关闭状态（推荐优化写法）
+         */
+        public boolean isAllClosed() {
+            if (stateBits == null || stateBits.length == 0) return true;
+
+            // 直接复用定义好的 isOpen 方法
+            for (int i = startBox; i <= endBox; i++) {
+                if (isOpen(i)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         @Override
