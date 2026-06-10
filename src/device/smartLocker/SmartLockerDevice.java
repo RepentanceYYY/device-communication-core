@@ -1,4 +1,4 @@
-package device.SmartLocker;
+package device.smartLocker;
 
 import device.core.DeviceCore;
 import device.utils.HexUtils;

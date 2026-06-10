@@ -389,7 +389,7 @@ public abstract class CommDispatcher {
         }
 
         // 如果没有当前任务，或者当前任务没 match 上，说明是设备主动发上来的数据
-        device.onDeviceReported(completeFrame, null);
+        device.onDeviceReported(completeFrame);
     }
 
     /**

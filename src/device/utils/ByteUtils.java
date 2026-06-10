@@ -58,4 +58,17 @@ public class ByteUtils {
 
         return result;
     }
+
+    /**
+     * 将 int 转换为 2 字节的 byte 数组（大端字节序：高位在前，低位在后）
+     * * @param value 要转换的整数，范围应在 -32768 ~ 32767 或 0 ~ 65535 之间
+     *
+     * @return 长度为 2 的 byte 数组
+     */
+    public static byte[] intToTwoBytes(int value) {
+        byte[] result = new byte[2];
+        result[0] = (byte) ((value >> 8) & 0xFF); // 高 8 位
+        result[1] = (byte) (value & 0xFF);        // 低 8 位
+        return result;
+    }
 }
