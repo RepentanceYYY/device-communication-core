@@ -23,15 +23,15 @@ public class DehumidifierDevice extends DeviceCore {
     /**
      * 控温方式寄存器号
      */
-    private static final int REGISTER_TEMP_CONTROL_MODE = 36;
+    private final int REGISTER_TEMP_CONTROL_MODE = 36;
     /**
      * 控湿手动开关寄存器号
      */
-    private static final int REGISTER_HUMID_MANUAL_SWITCH = 43;
+    private final int REGISTER_HUMID_MANUAL_SWITCH = 43;
     /**
      * 控温手动开关寄存器号
      */
-    private static final int REGISTER_TEMP_MANUAL_SWITCH = 44;
+    private final int REGISTER_TEMP_MANUAL_SWITCH = 44;
     /**
      * 读运行参数功能码
      */
@@ -43,27 +43,27 @@ public class DehumidifierDevice extends DeviceCore {
     /**
      * 控温开始值寄存器号
      */
-    private static final int REGISTER_TEMP_CONTROL_START = 8;
+    private final int REGISTER_TEMP_CONTROL_START = 8;
     /**
      * 控温停止值寄存器号
      */
-    private static final int REGISTER_TEMP_CONTROL_STOP = 9;
+    private final int REGISTER_TEMP_CONTROL_STOP = 9;
     /**
      * 控湿开启值寄存器号
      */
-    private static final int REGISTER_HUMIDITY_CONTROL_START = 10;
+    private final int REGISTER_HUMIDITY_CONTROL_START = 10;
     /**
      * 控湿停止值寄存器号
      */
-    private static final int REGISTER_HUMIDITY_CONTROL_STOP = 11;
+    private final int REGISTER_HUMIDITY_CONTROL_STOP = 11;
     /**
      * 温度报警上限值寄存器号
      */
-    private static final int REGISTER_TEMP_ALARM_UPPER = 12;
+    private final int REGISTER_TEMP_ALARM_UPPER = 12;
     /**
      * 温度报警下限值寄存器号
      */
-    private static final int REGISTER_TEMP_ALARM_LOWER = 13;
+    private final int REGISTER_TEMP_ALARM_LOWER = 13;
 
     /**
      * 获取设备地址
@@ -92,7 +92,7 @@ public class DehumidifierDevice extends DeviceCore {
      * @throws IllegalArgumentException 当传入的地址或长度越界时抛出
      * @throws Exception                当通信超时或设备返回异常时抛出
      */
-    public DehumidifierRunStatus queryDehumidifierRunStatus(int startIndex, int length) throws Exception {
+    public DehumidifierRunStatus queryRunStatus(int startIndex, int length) throws Exception {
         // 边界校验（31-46 区间）
         if (startIndex < 31 || startIndex > 46) {
             throw new IllegalArgumentException("查询失败：起始偏移量 startIndex (" + startIndex + ") 不在有效区间 [31, 46] 内！");
@@ -241,6 +241,40 @@ public class DehumidifierDevice extends DeviceCore {
     }
 
     /**
+     * 设置控湿手动开关
+     *
+     * @param controlModel true:正常 false:手动开
+     * @throws Exception
+     */
+    public void setHumidManualSwitchOn(boolean controlModel) throws Exception {
+        byte[] registerBytes = ByteUtils.intToTwoBytes(this.REGISTER_HUMID_MANUAL_SWITCH);
+        byte[] controlValueBytes = controlModel == true ? new byte[]{(byte) 0xFF, (byte) 0x00} : new byte[]{(byte) 0x00, (byte) 0x00};
+        byte[] dataBytes = ByteUtils.merge(registerBytes, controlValueBytes);
+        byte[] frame = this.buildFullFrame(WRITE_RUN_STATUS, dataBytes);
+        super.writeSync(frame, 0, 300L, (receive, write) -> {
+            this.handleExceptionCode(receive, write);
+            return true;
+        });
+    }
+
+    /**
+     * 设置控温手动开关
+     *
+     * @param controlModel true:正常 false:手动开
+     * @throws Exception
+     */
+    public void setTempManualSwitchOn(boolean controlModel) throws Exception {
+        byte[] registerBytes = ByteUtils.intToTwoBytes(this.REGISTER_TEMP_MANUAL_SWITCH);
+        byte[] controlValueBytes = controlModel == true ? new byte[]{(byte) 0xFF, (byte) 0x00} : new byte[]{(byte) 0x00, (byte) 0x00};
+        byte[] dataBytes = ByteUtils.merge(registerBytes, controlValueBytes);
+        byte[] frame = this.buildFullFrame(WRITE_RUN_STATUS, dataBytes);
+        super.writeSync(frame, 0, 300L, (receive, write) -> {
+            this.handleExceptionCode(receive, write);
+            return true;
+        });
+    }
+
+    /**
      * 查询设备运行参数
      *
      * @param startIndex 起始寄存器偏移量 (有效范围: 0 ~ 15)
@@ -249,7 +283,7 @@ public class DehumidifierDevice extends DeviceCore {
      * @throws IllegalArgumentException 当传入的地址或长度越界时抛出
      * @throws Exception                当通信超时或设备返回异常时抛出
      */
-    public DehumidifierRunParam queryDehumidifierRunParam(int startIndex, int length) throws Exception {
+    public DehumidifierRunParam queryRunParam(int startIndex, int length) throws Exception {
         // 边界校验（0-15 区间）
         if (startIndex < 0 || startIndex > 15) {
             throw new IllegalArgumentException("查询失败：起始偏移量 startIndex (" + startIndex + ") 不在有效区间 [0, 15] 内！");

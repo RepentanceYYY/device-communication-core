@@ -17,8 +17,11 @@ public class Main {
         dispatcher.setDeviceBase(device);
         device.open();
         device.setTempControlModeHeating(false);
-        Thread.sleep(500L);
-        device.queryDehumidifierRunParam(0, 15);
+        device.queryRunStatus(31, 15);
+        Thread.sleep(1000L);
+        device.setTempManualSwitchOn(true);
+        Thread.sleep(1000L);
+        device.queryRunStatus(31, 15);
 
     }
 }
