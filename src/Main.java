@@ -12,7 +12,7 @@ public class Main {
 
         TcpClientChannel channel = new TcpClientChannel("192.168.1.112", 9902);
         TcpClientDispatcher dispatcher = new TcpClientDispatcher(channel);
-        DehumidifierDevice device = new DehumidifierDevice();
+        DehumidifierDevice device = new DehumidifierDevice(1);
         device.setCommDispatcher(dispatcher);
         dispatcher.addDevice(device);
         device.open();

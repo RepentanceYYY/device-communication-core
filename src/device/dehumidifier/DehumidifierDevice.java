@@ -9,6 +9,15 @@ import device.utils.CheckSumUtils;
  */
 public class DehumidifierDevice extends DeviceCore {
     /**
+     * 设备地址(dec)
+     *
+     * @param address
+     */
+    public DehumidifierDevice(int address) {
+        this.address = address;
+    }
+
+    /**
      * SM设备地址
      */
     private int address = 1;
