@@ -12,10 +12,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 public class RFIDCabinetDevice extends DeviceCore {
-    @Override
-    public void setCommDispatcher(CommDispatcher comm) {
-        super.setCommDispatcher(comm);
-    }
 
     // 只需要回复确认的命令类型
     List<Byte> replyCheckType = Arrays.asList((byte) 0x51, (byte) 0x56, (byte) 0x57, (byte) 0x58, (byte) 0x59, (byte) 0x60, (byte) 0x66);

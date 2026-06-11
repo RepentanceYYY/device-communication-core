@@ -15,13 +15,13 @@ public class UdpDispatcher extends CommDispatcher {
     }
 
     /**
-     * Udp
+     * Udp 通道
      */
     private UdpChannel udpChannel;
 
     @Override
     public String getConnectionId() {
-        return this.udpChannel.remoteHost + ":" + udpChannel.remotePort;
+        return this.udpChannel.getConnectionId();
     }
 
     @Override

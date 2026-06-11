@@ -1,5 +1,7 @@
 package device.channel;
 
+import device.utils.NetUtils;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -15,7 +17,7 @@ import java.util.function.Consumer;
  */
 public class TcpServerChannel extends CommChannel<ServerSocket, Socket> {
 
-    private final int port;
+    private int port;
     private boolean isOpen;
     private ServerSocket serverSocket;
     private Thread acceptThread;
@@ -27,6 +29,10 @@ public class TcpServerChannel extends CommChannel<ServerSocket, Socket> {
      * 固定客户端端口
      */
     private int fixedClientPort;
+
+    public final String getConnectionId() {
+        return NetUtils.getLocalIp() + ":" + this.port;
+    }
 
     // 保存所有已连接的客户端(多客户端模块)
     private final CopyOnWriteArrayList<Socket> clients = new CopyOnWriteArrayList<>();
@@ -71,6 +77,8 @@ public class TcpServerChannel extends CommChannel<ServerSocket, Socket> {
         if (isOpen) return;
 
         serverSocket = new ServerSocket(port);
+        int realPort = serverSocket.getLocalPort();
+        this.port = realPort;
         isOpen = true;
         triggerOpen(serverSocket); // 服务端打开事件
 

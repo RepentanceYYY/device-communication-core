@@ -7,7 +7,7 @@ import java.io.IOException;
 /**
  * 基于串口的具体通道
  */
-public class SerialChannel extends CommChannel<SerialPort,SerialPort> {
+public class SerialChannel extends CommChannel<SerialPort, SerialPort> {
     public SerialChannel(String portName, int baudRate) {
         this.portName = portName;
         this.baudRate = baudRate;
@@ -18,14 +18,15 @@ public class SerialChannel extends CommChannel<SerialPort,SerialPort> {
      */
     private String portName;
 
-    public String getPortName() {
-        return portName;
-    }
-
     /**
      * 波特率
      */
     private int baudRate;
+
+    public final String getConnectionId() {
+        return portName + "@" + baudRate;
+    }
+
     /**
      * 读取数据的线程
      */
@@ -43,6 +44,7 @@ public class SerialChannel extends CommChannel<SerialPort,SerialPort> {
      * 串口
      */
     private SerialPort serialPort;
+
     @Override
     public boolean getIsOpen() {
         return isOpen && serialPort != null && serialPort.isOpen();
@@ -80,7 +82,7 @@ public class SerialChannel extends CommChannel<SerialPort,SerialPort> {
                         // 数据稳定了，一次性读取
                         byte[] readBuffer = new byte[available];
                         int numRead = serialPort.readBytes(readBuffer, readBuffer.length);
-                        onReceiveEvent(serialPort,readBuffer, numRead);
+                        onReceiveEvent(serialPort, readBuffer, numRead);
                     } else {
                         Thread.sleep(50); // 没数据时降低 CPU 占用
                     }

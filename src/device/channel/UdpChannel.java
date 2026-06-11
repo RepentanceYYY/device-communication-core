@@ -31,6 +31,10 @@ public class UdpChannel extends CommChannel<DatagramSocket, DatagramPacket> {
         this.localPort = localPort;
     }
 
+    public final String getConnectionId() {
+        return this.remoteHost + ":" + remotePort;
+    }
+
 
     @Override
     public boolean getIsOpen() {

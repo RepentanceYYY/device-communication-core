@@ -21,7 +21,7 @@ public class TcpServerDispatcher extends CommDispatcher {
 
     @Override
     public String getConnectionId() {
-        return null;
+        return this.getConnectionId();
     }
 
     @Override

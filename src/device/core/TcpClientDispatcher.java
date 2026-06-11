@@ -21,7 +21,7 @@ public class TcpClientDispatcher extends CommDispatcher {
 
     @Override
     public String getConnectionId() {
-        return this.tcpClientChannel.address.toString();
+        return this.tcpClientChannel.getConnectionId();
     }
 
     @Override
