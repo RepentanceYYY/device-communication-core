@@ -20,7 +20,7 @@ public class UdpDispatcher extends CommDispatcher {
     private UdpChannel udpChannel;
 
     @Override
-    public String getName() {
+    public String getConnectionId() {
         return this.udpChannel.remoteHost + ":" + udpChannel.remotePort;
     }
 

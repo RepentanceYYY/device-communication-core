@@ -2,7 +2,6 @@ package device.LoadCellShelf;
 
 import device.core.CommDispatcher;
 import device.core.DeviceCore;
-import device.core.IFrameProtocol;
 import device.enums.DispatchMode;
 import device.model.PositionData;
 import device.utils.ByteUtils;
@@ -18,12 +17,11 @@ import java.util.List;
 /**
  * 称重货架
  */
-public class ShelfDevice extends DeviceCore implements IFrameProtocol {
+public class ShelfDevice extends DeviceCore {
 
     @Override
     public void setCommDispatcher(CommDispatcher comm) {
         super.setCommDispatcher(comm);
-        comm.responseTimeout = 1500;
     }
 
 
@@ -744,7 +742,7 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
     }
 
     @Override
-    public boolean isMatch(byte[] writeBytes, byte[] readBytes) {
+    protected boolean isMatch(byte[] writeBytes, byte[] readBytes) {
         if (this.transparentModeIsMatch(writeBytes, readBytes)) return true;
         if (this.relayModelIsMatch(writeBytes, readBytes)) return true;
         return false;
@@ -847,11 +845,6 @@ public class ShelfDevice extends DeviceCore implements IFrameProtocol {
         frame[i] = 0x0A;
 
         return frame;
-    }
-
-    @Override
-    public byte[] buildFullFrame(byte[] data) {
-        return new byte[0];
     }
 
     private String formatStatus(int status) {

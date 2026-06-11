@@ -425,6 +425,7 @@ public class DehumidifierDevice extends DeviceCore {
         byte[] frame = this.buildFullFrame(WRITE_RUN_PARAM, dataBytes);
         this.writeSync(frame, 0, 300L, (receive, write) -> {
             this.handleExceptionCode(receive, write);
+            System.out.println("控温开始值设置成功");
             return true;
         });
     }
@@ -445,6 +446,7 @@ public class DehumidifierDevice extends DeviceCore {
         byte[] frame = this.buildFullFrame(WRITE_RUN_PARAM, dataBytes);
         this.writeSync(frame, 0, 300L, (receive, write) -> {
             this.handleExceptionCode(receive, write);
+            System.out.println("控温停止值设置成功");
             return true;
         });
     }
@@ -569,7 +571,10 @@ public class DehumidifierDevice extends DeviceCore {
      * @return
      */
     @Override
-    public final boolean isMatch(byte[] writeBytes, byte[] readBytes) {
+    protected final boolean isMatch(byte[] writeBytes, byte[] readBytes) {
+        if (readBytes[0] != (byte) (address & 0xFF)) {
+            return false;
+        }
         if (writeBytes[0] != readBytes[0]) {
             return false;
         }

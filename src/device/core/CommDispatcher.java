@@ -7,6 +7,7 @@ import device.utils.HexUtils;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
@@ -20,8 +21,6 @@ public abstract class CommDispatcher {
     protected CommDispatcher() {
         this.priorityQueue = new PriorityBlockingQueue<>();
         this.concurrentLinkedQueue = new ConcurrentLinkedQueue<>();
-        this.responseTimeout = 500;
-        setDeviceBase(DeviceCore.instance);
     }
 
     // 使用有界队列（500），防止指令积压撑爆内存
@@ -62,11 +61,11 @@ public abstract class CommDispatcher {
     public Runnable onAllTasksCompleted;
 
     /**
-     * 获取链接名
+     * 获取当前连接链路的唯一标识（如 COM3@9600 或 192.168.1.99:1086)
      *
      * @return
      */
-    public abstract String getName();
+    public abstract String getConnectionId();
 
     /**
      * 连接是否以及打开
@@ -87,10 +86,6 @@ public abstract class CommDispatcher {
     public abstract void close() throws IOException;
 
     /**
-     * 响应超时时间
-     */
-    public int responseTimeout;
-    /**
      * 当前动作
      */
     protected volatile Task currentTask;
@@ -103,9 +98,9 @@ public abstract class CommDispatcher {
     public abstract void write(Task task) throws IOException;
 
     /**
-     * 设备
+     * 多设备
      */
-    protected DeviceCore device;
+    private final Set<DeviceCore> devices = new CopyOnWriteArraySet<>();
 
     /**
      * 获取当前编码格式
@@ -115,12 +110,21 @@ public abstract class CommDispatcher {
     public abstract Charset getCharset();
 
     /**
-     * 设置设备
-     *
-     * @param device
+     * 添加设备到该通信链路上
      */
-    public void setDeviceBase(DeviceCore device) {
-        this.device = device;
+    public void addDevice(DeviceCore device) {
+        if (device != null) {
+            this.devices.add(device);
+        }
+    }
+
+    /**
+     * 从该通信链路上移除设备
+     */
+    public void removeDevice(DeviceCore device) {
+        if (device != null) {
+            this.devices.remove(device);
+        }
     }
 
     /**
@@ -340,9 +344,10 @@ public abstract class CommDispatcher {
                 ((DeviceCore.CommCallbackWrapper) task.getDataReceived()).notifyFinalResult(success, lastException);
             }
             // 在任务之间添加间隔，避免设备处理不过来
-            if (device.getWriteIntervalTime() > 0) {
+            long interval = this.getIntervalTimeForTask(task);
+            if (interval > 0) {
                 try {
-                    Thread.sleep(device.getWriteIntervalTime());
+                    Thread.sleep(interval);
                 } catch (InterruptedException ignore) {
                 }
             }
@@ -359,17 +364,20 @@ public abstract class CommDispatcher {
     }
 
     /**
-     * 核心接收逻辑：只做分发，不做任何匹配
+     * 接收到设备发送的数据
      */
-    public void receive(byte[] readBytes) {
-        if (device == null || !device.validate(readBytes)) return;
-
+    public void receive(byte[] receiveBytes) {
+        if (devices.isEmpty() || receiveBytes == null || receiveBytes.length == 0) return;
         // 交给设备层去解析帧
-        device.onRawDataReceived(readBytes);
+        DeviceCore firstDevice = devices.stream().findFirst().orElse(null);
+        // 任选一个设备来做粘包拆包（因为同一通道协议是一样的，随便哪个 device 拼出的完整帧都一样）
+        if (firstDevice.validate(receiveBytes)) {
+            firstDevice.onRawDataReceived(receiveBytes);
+        }
     }
 
     /**
-     * 处理完整帧
+     * 处理设备拼好的完整帧
      *
      * @param completeFrame
      */
@@ -377,19 +385,37 @@ public abstract class CommDispatcher {
         lock.lock();
         try {
             if (this.currentTask != null) {
-                // 用完整的、干净的帧去跟当前发送的指令做 match 强校验
-                if (device.isMatch(this.currentTask.getWriteBytes(), completeFrame)) {
-                    this.lastReadBytes = completeFrame;
-                    responseCondition.signalAll(); // 匹配成功，精准唤醒发送线程
-                    return;
+                // 遍历所有设备，看接收到的完整帧属于谁（或者只要有一个匹配上就通过）
+                for (DeviceCore dev : devices) {
+                    if (dev.isMatch(this.currentTask.getWriteBytes(), completeFrame)) {
+                        this.lastReadBytes = completeFrame;
+                        responseCondition.signalAll(); // 精准唤醒等待的主线程
+                        return;
+                    }
                 }
             }
         } finally {
             lock.unlock();
         }
 
-        // 如果没有当前任务，或者当前任务没 match 上，说明是设备主动发上来的数据
-        device.onDeviceReported(completeFrame);
+        // 如果没有当前同步任务，或者当前任务没 match 上，说明是某台设备自发主动上报的数据
+        // 将数据帧广播给当前通道下的<所有>设备实例
+        for (DeviceCore dev : devices) {
+            dev.onDeviceReported(completeFrame);
+        }
+    }
+
+    /**
+     * 尝试寻找当前正在执行的任务属于哪一个设备，并获取其发送间隔
+     */
+    private long getIntervalTimeForTask(Task task) {
+        if (task == null || task.getWriteBytes() == null || task.getWriteBytes().length == 0) return 50;
+        for (DeviceCore dev : devices) {
+            if (dev.isMatch(task.getWriteBytes(), task.getWriteBytes())) {
+                return dev.getWriteIntervalTime();
+            }
+        }
+        return 50;
     }
 
     /**

@@ -17,7 +17,7 @@ public class SerialDispatcher extends CommDispatcher {
     private SerialChannel serialChannel;
 
     @Override
-    public String getName() {
+    public String getConnectionId() {
         return this.serialChannel.getPortName();
     }
 

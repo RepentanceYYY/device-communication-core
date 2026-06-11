@@ -1,8 +1,7 @@
-package device;
+package device.rfid;
 
 import device.core.CommDispatcher;
 import device.core.DeviceCore;
-import device.core.IFrameProtocol;
 import device.enums.DispatchMode;
 import device.utils.HexUtils;
 
@@ -12,11 +11,10 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-public class RFIDCabinetDevice extends DeviceCore implements IFrameProtocol {
+public class RFIDCabinetDevice extends DeviceCore {
     @Override
     public void setCommDispatcher(CommDispatcher comm) {
         super.setCommDispatcher(comm);
-        comm.responseTimeout = 1500;
     }
 
     // 只需要回复确认的命令类型
@@ -169,9 +167,7 @@ public class RFIDCabinetDevice extends DeviceCore implements IFrameProtocol {
         return true;
     }
 
-
-    @Override
-    public byte[] buildFullFrame(byte[] data) {
+    private byte[] buildFullFrame(byte[] data) {
         byte[] frame = new byte[2 + data.length + 2];
         frame[0] = (byte) 0xAA;
         frame[1] = (byte) 0x7A;

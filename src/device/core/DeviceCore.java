@@ -70,10 +70,6 @@ public class DeviceCore {
         return this.commDispatcher.getCharset();
     }
 
-    public final void setTimeout(int timeout) {
-        commDispatcher.responseTimeout = Math.max(timeout, commDispatcher.responseTimeout);
-    }
-
     @FunctionalInterface
     public interface TaskParser<T> {
         /**
@@ -447,7 +443,8 @@ public class DeviceCore {
      * @param rawBytes
      */
     public final void onRawDataReceived(byte[] rawBytes) {
-        List<byte[]> completeFrames = new ArrayList<>();
+
+        List<byte[]> completeFrames;
 
         synchronized (bufferLock) {
             // 灌入缓冲区
@@ -502,11 +499,12 @@ public class DeviceCore {
 
     /**
      * 基础校验
+     * 验证这串数据是不是一个合法的
      *
      * @param readBytes
      * @return
      */
-    public boolean validate(byte[] readBytes) {
+    protected boolean validate(byte[] readBytes) {
         if (readBytes == null || readBytes.length < 1) {
             return false;
         }
@@ -520,7 +518,7 @@ public class DeviceCore {
      * @param readBytes  读取
      * @return
      */
-    public boolean isMatch(byte[] writeBytes, byte[] readBytes) {
+    protected boolean isMatch(byte[] writeBytes, byte[] readBytes) {
         if (readBytes == null || readBytes.length < 1) return false;
         return validate(readBytes);
     }
