@@ -94,7 +94,7 @@ public class DehumidifierDevice extends DeviceCore {
      */
     public DehumidifierRunStatus queryRunStatus(int startIndex, int length) throws Exception {
         // 边界校验（31-46 区间）
-        if (startIndex < 31 || startIndex > 46) {
+        if (startIndex < 0 || startIndex > 46) {
             throw new IllegalArgumentException("查询失败：起始偏移量 startIndex (" + startIndex + ") 不在有效区间 [31, 46] 内！");
         }
         if (length <= 0) {
@@ -228,9 +228,8 @@ public class DehumidifierDevice extends DeviceCore {
      * @param controlModel true:升温 false:降温
      */
     public void setTempControlModeHeating(boolean controlModel) throws Exception {
-        TempControlMode tempControlMode = TempControlMode.fromStatus(controlModel);
-        int controlValue = tempControlMode.getControlValue();
-        byte[] controlValueBytes = ByteUtils.intToTwoBytes(controlValue);
+
+        byte[] controlValueBytes = controlModel ? new byte[]{(byte) 0xFF, (byte) 0x00} : new byte[]{(byte) 0x00, (byte) 0x00};
         byte[] registerControlValueBytes = ByteUtils.intToTwoBytes(REGISTER_TEMP_CONTROL_MODE);
         byte[] dataBytes = new byte[]{registerControlValueBytes[0], registerControlValueBytes[1], controlValueBytes[0], controlValueBytes[1]};
         byte[] frame = this.buildFullFrame(WRITE_RUN_STATUS, dataBytes);
@@ -238,17 +237,21 @@ public class DehumidifierDevice extends DeviceCore {
             this.handleExceptionCode(receive, write);
             return true;
         });
+
     }
 
     /**
      * 设置控湿手动开关
      *
-     * @param controlModel true:正常 false:手动开
-     * @throws Exception
+     * @param manualOn true:手动开启控湿, false:恢复正常自动控制
      */
-    public void setHumidManualSwitchOn(boolean controlModel) throws Exception {
+    public void setHumidManualSwitchOn(boolean manualOn) throws Exception {
+        // 物理地址 43 (寄存器44)
         byte[] registerBytes = ByteUtils.intToTwoBytes(this.REGISTER_HUMID_MANUAL_SWITCH);
-        byte[] controlValueBytes = controlModel == true ? new byte[]{(byte) 0xFF, (byte) 0x00} : new byte[]{(byte) 0x00, (byte) 0x00};
+
+        // FF00 表示手动开启，0000 表示恢复正常关闭手动
+        byte[] controlValueBytes = manualOn ? new byte[]{(byte) 0xFF, (byte) 0x00} : new byte[]{(byte) 0x00, (byte) 0x00};
+
         byte[] dataBytes = ByteUtils.merge(registerBytes, controlValueBytes);
         byte[] frame = this.buildFullFrame(WRITE_RUN_STATUS, dataBytes);
         super.writeSync(frame, 0, 300L, (receive, write) -> {
@@ -260,12 +263,12 @@ public class DehumidifierDevice extends DeviceCore {
     /**
      * 设置控温手动开关
      *
-     * @param controlModel true:正常 false:手动开
+     * @param controlModel true:手动开启控温, false:恢复正常自动控制
      * @throws Exception
      */
     public void setTempManualSwitchOn(boolean controlModel) throws Exception {
         byte[] registerBytes = ByteUtils.intToTwoBytes(this.REGISTER_TEMP_MANUAL_SWITCH);
-        byte[] controlValueBytes = controlModel == true ? new byte[]{(byte) 0xFF, (byte) 0x00} : new byte[]{(byte) 0x00, (byte) 0x00};
+        byte[] controlValueBytes = controlModel ? new byte[]{(byte) 0xFF, (byte) 0x00} : new byte[]{(byte) 0x00, (byte) 0x00};
         byte[] dataBytes = ByteUtils.merge(registerBytes, controlValueBytes);
         byte[] frame = this.buildFullFrame(WRITE_RUN_STATUS, dataBytes);
         super.writeSync(frame, 0, 300L, (receive, write) -> {
@@ -322,9 +325,7 @@ public class DehumidifierDevice extends DeviceCore {
     public DehumidifierRunParam parseRunParam(byte[] receive, byte[] write, int startIndex) {
 
         // 功能码异常校验（第二个字节，索引为 1）
-        if (((write[1] & 0xFF) | 0x80) == (receive[1] & 0xFF)) {
-            throw new RuntimeException("出现异常，异常码: 0x" + String.format("%02X", receive[2]));
-        }
+        this.handleExceptionCode(receive, write);
 
         // 获取数据长度（第三个字节，索引为 2）
         int dataLen = receive[2] & 0xFF;

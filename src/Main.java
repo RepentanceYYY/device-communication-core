@@ -15,13 +15,10 @@ public class Main {
         DehumidifierDevice device = new DehumidifierDevice();
         device.setCommDispatcher(dispatcher);
         dispatcher.setDeviceBase(device);
-        device.open();
-        device.setTempControlModeHeating(false);
-        device.queryRunStatus(31, 15);
-        Thread.sleep(1000L);
-        device.setTempManualSwitchOn(true);
-        Thread.sleep(1000L);
-        device.queryRunStatus(31, 15);
+        device.setHumidManualSwitchOn(false);
+        Thread.sleep(2000L);
+        device.queryRunStatus(31,15);
+
 
     }
 }
