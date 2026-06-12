@@ -3,7 +3,6 @@ package device.LoadCellShelf;
 import device.core.CommDispatcher;
 import device.core.DeviceCore;
 import device.enums.DispatchMode;
-import device.model.PositionData;
 import device.utils.ByteUtils;
 import device.utils.HexUtils;
 import device.utils.StringUtils;
