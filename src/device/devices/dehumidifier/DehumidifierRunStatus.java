@@ -1,4 +1,4 @@
-package device.dehumidifier;
+package device.devices.dehumidifier;
 
 /**
  * 除湿机运行状态及告警实体类 (对应功能码 FC=0x01 读取 / FC=0x05 控制)

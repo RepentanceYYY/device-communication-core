@@ -1,4 +1,4 @@
-package device.StackLight;
+package device.devices.StackLight;
 
 import device.core.CommDispatcher;
 import device.core.DeviceCore;

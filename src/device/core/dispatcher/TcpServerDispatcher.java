@@ -1,6 +1,7 @@
-package device.core;
+package device.core.dispatcher;
 
-import device.channel.TcpClientChannel;
+import device.channel.TcpServerChannel;
+import device.core.CommDispatcher;
 import device.model.Task;
 
 import java.io.IOException;
@@ -8,45 +9,45 @@ import java.net.Socket;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 
-public class TcpClientDispatcher extends CommDispatcher {
-    public TcpClientDispatcher(TcpClientChannel tcpClientChannel) {
-        this.tcpClientChannel = tcpClientChannel;
-        this.tcpClientChannel.receiveEvent = this::channelReceiveEvent;
+/**
+ * Tcp服务端
+ */
+public class TcpServerDispatcher extends CommDispatcher {
+    public TcpServerDispatcher(TcpServerChannel tcpServerChannel) {
+        this.tcpServerChannel = tcpServerChannel;
+        this.tcpServerChannel.receiveEvent = this::channelReceiveEvent;
     }
 
-    /**
-     * Tcp客户端
-     */
-    private TcpClientChannel tcpClientChannel;
+    private TcpServerChannel tcpServerChannel;
 
     @Override
     public String getConnectionId() {
-        return this.tcpClientChannel.getConnectionId();
+        return this.getConnectionId();
     }
 
     @Override
     public boolean isOpen() {
-        return tcpClientChannel.getIsOpen();
+        return this.tcpServerChannel.getIsOpen();
     }
 
     @Override
     public void open() throws IOException {
-        tcpClientChannel.start(3);
+        this.tcpServerChannel.open();
     }
 
     @Override
     public void close() throws IOException {
-        tcpClientChannel.close();
+        this.tcpServerChannel.close();
     }
 
     @Override
     public void write(Task task) throws IOException {
-        tcpClientChannel.send(task.getWriteBytes());
+        this.tcpServerChannel.send(task.getWriteBytes());
     }
 
     @Override
     public Charset getCharset() {
-        return this.tcpClientChannel.charset;
+        return this.tcpServerChannel.charset;
     }
 
     /**

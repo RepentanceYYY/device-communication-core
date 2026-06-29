@@ -1,4 +1,4 @@
-package device.LoadCellShelf;
+package device.devices.LoadCellShelf;
 
 public class PositionData {
     /**

@@ -1,6 +1,5 @@
-package device.rfid;
+package device.devices.rfid;
 
-import device.core.CommDispatcher;
 import device.core.DeviceCore;
 import device.enums.DispatchMode;
 import device.utils.HexUtils;

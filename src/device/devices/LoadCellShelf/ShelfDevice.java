@@ -1,4 +1,4 @@
-package device.LoadCellShelf;
+package device.devices.LoadCellShelf;
 
 import device.core.CommDispatcher;
 import device.core.DeviceCore;

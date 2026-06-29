@@ -1,7 +1,8 @@
-package device.core;
+package device.core.dispatcher;
 
 import com.fazecast.jSerialComm.SerialPort;
 import device.channel.SerialChannel;
+import device.core.CommDispatcher;
 import device.model.Task;
 
 import java.io.IOException;

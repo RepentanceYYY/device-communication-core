@@ -1,6 +1,7 @@
-package device.core;
+package device.core.dispatcher;
 
 import device.channel.UdpChannel;
+import device.core.CommDispatcher;
 import device.model.Task;
 
 import java.io.IOException;
