@@ -56,11 +56,6 @@ public abstract class CommDispatcher {
     protected ConcurrentLinkedQueue<Task> concurrentLinkedQueue;
 
     /**
-     * 队列执行完毕事件
-     */
-    public Runnable onAllTasksCompleted;
-
-    /**
      * 获取当前连接链路的唯一标识（如 COM3@9600 或 192.168.1.99:1086)
      *
      * @return
@@ -352,13 +347,12 @@ public abstract class CommDispatcher {
                 }
             }
         }
-
-        // 队列执行完毕通知
-        if (onAllTasksCompleted != null) {
+        // 队列执行完毕，通知当前挂载的所有设备
+        for (DeviceCore device : devices) {
             try {
-                onAllTasksCompleted.run();
+                device.onAllTasksCompleted();
             } catch (Exception e) {
-                System.err.println("ActionEndEvent 执行异常: " + e.getMessage());
+                System.err.println("[CommDispatcher] 通知设备队列完成异常: " + e.getMessage());
             }
         }
     }
