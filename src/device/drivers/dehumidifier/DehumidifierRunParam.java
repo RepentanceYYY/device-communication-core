@@ -1,4 +1,4 @@
-package device.devices.dehumidifier;
+package device.drivers.dehumidifier;
 
 /**
  * 运行参数及状态实体类 (对应功能码 FC=0x03 / 0x04)

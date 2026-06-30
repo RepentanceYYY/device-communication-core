@@ -1,4 +1,4 @@
-package device.devices.qianMingLock;
+package device.drivers.qianMingLock;
 
 import device.core.DeviceCore;
 import device.utils.HexUtils;

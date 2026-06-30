@@ -1,4 +1,4 @@
-package device.devices.LoadCellShelf;
+package device.drivers.LoadCellShelf;
 
 /**
  * 灯光颜色枚举

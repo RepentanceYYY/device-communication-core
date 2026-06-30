@@ -1,4 +1,4 @@
-package device.devices.dehumidifier;
+package device.drivers.dehumidifier;
 
 /**
  * 异常代码表 (Exception Code)

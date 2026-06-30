@@ -105,6 +105,15 @@ public abstract class CommDispatcher {
     public abstract Charset getCharset();
 
     /**
+     * 获取当前通信链路上挂载的设备数量。
+     *
+     * @return 挂载的设备数量
+     */
+    public int getDeviceCount() {
+        return this.devices.size();
+    }
+
+    /**
      * 添加设备到该通信链路上
      */
     public void addDevice(DeviceCore device) {
@@ -120,6 +129,13 @@ public abstract class CommDispatcher {
         if (device != null) {
             this.devices.remove(device);
         }
+    }
+
+    /**
+     * 移除当前通信链路上挂载的所有设备。
+     */
+    public void clearDevices() {
+        this.devices.clear();
     }
 
     /**

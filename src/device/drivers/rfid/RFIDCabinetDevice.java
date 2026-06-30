@@ -1,4 +1,4 @@
-package device.devices.rfid;
+package device.drivers.rfid;
 
 import device.core.DeviceCore;
 import device.enums.DispatchMode;

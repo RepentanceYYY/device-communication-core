@@ -55,7 +55,21 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CommDispatcherManager {
 
+    /**
+     * 通信工厂注册表
+     * Key：通信类型（如 serial、tcp、udp、tcpserver）
+     * Value：对应的通信工厂，用于创建 Dispatcher 实例。
+     */
     private static final Map<String, CommFactory> factoryMap = new ConcurrentHashMap<>();
+
+    /**
+     * 全局通信调度器缓存
+     * Key：通信类型:通信地址（如 serial:COM3@9600）
+     * Value：对应的通信调度器实例。
+     * <p>
+     * 相同通信链路全局仅维护一个 Dispatcher，
+     * 多个设备共享同一 Dispatcher，实现连接复用。
+     */
     private static final Map<String, CommDispatcher> dispatcherMap = new ConcurrentHashMap<>();
 
     static {
@@ -65,10 +79,18 @@ public class CommDispatcherManager {
         registerFactory(new TcpServerFactory());
     }
 
+    /**
+     * 构造函数私有化
+     */
     private CommDispatcherManager() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }
 
+    /**
+     * 注册通信工厂
+     *
+     * @param factory
+     */
     public static void registerFactory(CommFactory factory) {
         if (factory != null && factory.getCommType() != null) {
             factoryMap.put(factory.getCommType().toLowerCase(), factory);
@@ -76,7 +98,16 @@ public class CommDispatcherManager {
     }
 
     /**
-     * 仅创建，不保存到 Map
+     * 创建一个新的通信调度器实例，但不会注册到全局管理器。
+     * <p>
+     * 该方法每次调用都会创建新的 {@link CommDispatcher} 实例，
+     * 不会缓存到全局 Dispatcher Map，也不会复用已有实例。
+     * 如需获取全局共享的通信调度器，请使用 {@link #getOrCreate(String, String)}。
+     * </p>
+     *
+     * @param commType    通信类型（serial、tcp、udp、tcpserver）
+     * @param commAddress 通信地址
+     * @return 新创建的通信调度器实例
      */
     public static CommDispatcher create(String commType, String commAddress) {
         if (commType == null) {
@@ -101,7 +132,18 @@ public class CommDispatcherManager {
     }
 
     /**
-     * 串口独有的冲突检测：提取串口号，检测是否有其他波特率已经占用了该物理端口
+     * 检查串口通信地址是否与已存在的通信链路发生冲突。
+     * <p>
+     * 同一个物理串口在同一时刻只能使用一种波特率，因此禁止为同一串口创建
+     * 不同波特率的通信调度器。例如：
+     * <ul>
+     *     <li>COM3@9600 和 COM3@9600：允许（复用同一调度器）</li>
+     *     <li>COM3@9600 和 COM3@19200：禁止（波特率冲突）</li>
+     * </ul>
+     * </p>
+     *
+     * @param commAddress 串口通信地址（格式：串口号@波特率）
+     * @throws IllegalStateException 当检测到同一物理串口使用不同波特率时抛出
      */
     private static void checkSerialPortConflict(String commAddress) {
         if (commAddress == null || !commAddress.contains("@")) {
@@ -133,7 +175,15 @@ public class CommDispatcherManager {
     }
 
     /**
-     * 创建并添加
+     * 获取指定通信链路对应的通信调度器。
+     * <p>
+     * 如果该通信链路对应的调度器已存在，则直接返回；
+     * 如果不存在，则创建新的调度器并缓存到全局管理器中。
+     * </p>
+     *
+     * @param commType    通信类型（serial、tcp、udp、tcpserver）
+     * @param commAddress 通信地址
+     * @return 全局唯一的通信调度器实例
      */
     public static CommDispatcher createAndAdd(String commType, String commAddress) {
         String key = buildKey(commType, commAddress);
@@ -141,23 +191,59 @@ public class CommDispatcherManager {
         return dispatcherMap.computeIfAbsent(key, k -> create(commType, commAddress));
     }
 
+    /**
+     * 获取指定通信链路对应的通信调度器。
+     *
+     * @param commType    通信类型（serial、tcp、udp、tcpserver）
+     * @param commAddress 通信地址
+     * @return 如果存在则返回对应的通信调度器，否则返回 {@code null}
+     */
     public static CommDispatcher get(String commType, String commAddress) {
         return dispatcherMap.get(buildKey(commType, commAddress));
     }
 
+    /**
+     * 获取指定通信链路对应的通信调度器。
+     * <p>
+     * 如果该通信链路对应的调度器已存在，则直接返回；
+     * 如果不存在，则创建新的调度器并缓存到全局管理器中。
+     * </p>
+     *
+     * @param commType    通信类型（serial、tcp、udp、tcpserver）
+     * @param commAddress 通信地址
+     * @return 全局唯一的通信调度器实例
+     */
     public static CommDispatcher getOrCreate(String commType, String commAddress) {
         return createAndAdd(commType, commAddress);
     }
 
+    /**
+     * 判断指定通信链路对应的通信调度器是否已存在于全局管理器中。
+     *
+     * @param commType    通信类型（serial、tcp、udp、tcpserver）
+     * @param commAddress 通信地址
+     * @return {@code true} 表示已存在，否则返回 {@code false}
+     */
     public static boolean isExist(String commType, String commAddress) {
         return dispatcherMap.containsKey(buildKey(commType, commAddress));
     }
 
+    /**
+     * 从全局管理器中移除指定通信链路对应的通信调度器，并释放相关资源。
+     * <p>
+     * 该方法会清空当前通信链路上挂载的所有设备，关闭底层通信连接，
+     * 并将对应的通信调度器从全局缓存中移除。
+     * </p>
+     *
+     * @param commType    通信类型（serial、tcp、udp、tcpserver）
+     * @param commAddress 通信地址
+     */
     public static void remove(String commType, String commAddress) {
         String key = buildKey(commType, commAddress);
         CommDispatcher dispatcher = dispatcherMap.remove(key);
         if (dispatcher != null) {
             try {
+                dispatcher.clearDevices();
                 dispatcher.close();
             } catch (IOException e) {
                 System.err.println("[CommDispatcherManager] 关闭通道失败 [" + key + "]: " + e.getMessage());
@@ -165,10 +251,21 @@ public class CommDispatcherManager {
         }
     }
 
+
+    /**
+     * 关闭并释放所有通信调度器。
+     * <p>
+     * 该方法会关闭所有底层通信连接，清空各通信链路上挂载的设备，
+     * 并移除全局管理器中缓存的所有通信调度器。
+     * 通常在应用关闭或框架销毁时调用。
+     * </p>
+     */
     public static void shutdownAll() {
         for (Map.Entry<String, CommDispatcher> entry : dispatcherMap.entrySet()) {
             try {
-                entry.getValue().close();
+                CommDispatcher value = entry.getValue();
+                value.clearDevices();
+                value.close();
             } catch (IOException e) {
                 System.err.println("[CommDispatcherManager] 关闭通道失败 [" + entry.getKey() + "]: " + e.getMessage());
             }
@@ -176,6 +273,19 @@ public class CommDispatcherManager {
         dispatcherMap.clear();
     }
 
+    /**
+     * 构建通信调度器在全局管理器中的唯一标识。
+     * <p>
+     * Key 格式为：{@code 通信类型:通信地址}，
+     * 例如：{@code serial:COM3@9600}、{@code tcp:192.168.1.100:8080}。
+     * 为保证唯一性，通信类型和通信地址都会进行去除首尾空格及统一小写处理。
+     * </p>
+     *
+     * @param commType    通信类型
+     * @param commAddress 通信地址
+     * @return 通信调度器唯一标识
+     * @throws IllegalArgumentException 当通信类型或通信地址为空时抛出
+     */
     private static String buildKey(String commType, String commAddress) {
         if (commType == null || commAddress == null) {
             throw new IllegalArgumentException("commType and commAddress cannot be null");

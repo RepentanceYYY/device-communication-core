@@ -1,4 +1,4 @@
-package device.devices.dehumidifier;
+package device.drivers.dehumidifier;
 
 import device.core.DeviceCore;
 import device.utils.ByteUtils;

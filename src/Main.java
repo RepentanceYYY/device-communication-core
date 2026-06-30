@@ -1,6 +1,6 @@
 import device.core.CommDispatcher;
 import device.core.CommDispatcherManager;
-import device.devices.dehumidifier.DehumidifierDevice;
+import device.drivers.dehumidifier.DehumidifierDevice;
 
 public class Main {
 
