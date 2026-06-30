@@ -71,4 +71,8 @@ public class ByteUtils {
         result[1] = (byte) (value & 0xFF);        // 低 8 位
         return result;
     }
+
+    public static int readUInt16(byte[] data, int offset) {
+        return ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+    }
 }

@@ -320,7 +320,7 @@ public class DehumidifierDevice extends DeviceCore {
         // 发送请求帧
         byte[] bytes = this.buildFullFrame(READ_RUN_PARAM, dataDomain);
 
-        return super.writeSync(bytes, 0, 200L, (receive, write) -> parseRunParam(receive, write, startIndex));
+        return super.writeSync(bytes, 0, 500L, (receive, write) -> parseRunParam(receive, write, startIndex));
     }
 
     /**

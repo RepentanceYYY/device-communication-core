@@ -25,7 +25,7 @@ public class DeviceCore {
     /**
      * 写入间隔时间
      */
-    private volatile long writeIntervalTime = 0L;
+    private volatile long writeIntervalTime = 50L;
     /**
      * 接收缓冲区
      */
