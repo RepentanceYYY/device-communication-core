@@ -114,6 +114,15 @@ public abstract class CommDispatcher {
     }
 
     /**
+     * 当前通信链路是否未挂载任何设备。
+     *
+     * @return {@code true} 表示没有设备，否则返回 {@code false}
+     */
+    public boolean isEmpty() {
+        return this.devices.isEmpty();
+    }
+
+    /**
      * 添加设备到该通信链路上
      */
     public void addDevice(DeviceCore device) {
