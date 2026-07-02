@@ -22,6 +22,12 @@ public class UdpChannel extends CommChannel<DatagramSocket, DatagramPacket> {
 
     public String remoteHost;
 
+    public UdpChannel(String remoteHost, int remotePort, int localPort) {
+        this.remoteHost = remoteHost;
+        this.remotePort = remotePort;
+        this.localPort = localPort;
+    }
+
     public UdpChannel(String remoteHost, int remotePort) {
         this.remoteHost = remoteHost;
         this.remotePort = remotePort;

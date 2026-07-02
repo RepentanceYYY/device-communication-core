@@ -62,6 +62,14 @@ public class DeviceCore {
         this.commDispatcher = commDispatcher;
     }
 
+    /**
+     * 获取通信调度器
+     * @return
+     */
+    public CommDispatcher getCommDispatcher(){
+        return this.commDispatcher;
+    }
+
     public final Charset getCharset() {
         return this.commDispatcher.getCharset();
     }

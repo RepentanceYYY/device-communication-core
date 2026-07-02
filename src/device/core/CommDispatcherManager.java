@@ -6,6 +6,7 @@ import device.core.factory.TcpServerFactory;
 import device.core.factory.UdpFactory;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -247,6 +248,35 @@ public class CommDispatcherManager {
                 dispatcher.close();
             } catch (IOException e) {
                 System.err.println("[CommDispatcherManager] 关闭通道失败 [" + key + "]: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 从全局管理器中移除指定通信调度器，并释放相关资源。
+     * <p>
+     * 该方法会查找与指定 Dispatcher 对应的缓存项，
+     * 清空其挂载的所有设备、关闭底层通信连接，并将其从全局缓存中移除。
+     * </p>
+     *
+     * @param dispatcher 待移除的通信调度器
+     */
+    public static void remove(CommDispatcher dispatcher) {
+        if (dispatcher == null) {
+            return;
+        }
+        //remove(dispatcher) 有“弱一致删除 + IO副作用”问题
+        for (Iterator<Map.Entry<String, CommDispatcher>> it = dispatcherMap.entrySet().iterator(); it.hasNext();) {
+            Map.Entry<String, CommDispatcher> entry = it.next();
+
+            if (entry.getValue() == dispatcher) {
+                try {
+                    dispatcher.clearDevices();
+                    dispatcher.close();
+                } catch (IOException e) {
+                }
+                it.remove();
+                break;
             }
         }
     }

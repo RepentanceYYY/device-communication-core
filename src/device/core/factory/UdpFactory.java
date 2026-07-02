@@ -9,6 +9,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 public class UdpFactory implements CommFactory {
+
     @Override
     public String getCommType() {
         return "udp";
@@ -19,32 +20,50 @@ public class UdpFactory implements CommFactory {
         if (commAddress == null || commAddress.isBlank()) {
             throw new IllegalArgumentException("Address cannot be empty");
         }
+
         String[] parts = commAddress.split(":");
-        if (parts.length != 2) {
-            throw new IllegalArgumentException("Address format must be ip:port");
+        if (parts.length != 3) {
+            throw new IllegalArgumentException("Address format must be localPort:ip:remotePort");
         }
 
-        // 校验 IP (支持纯IP或域名)
+        // 本地端口
         try {
-            InetAddress.getByName(parts[0]);
-        } catch (UnknownHostException e) {
-            throw new IllegalArgumentException("Invalid host/IP address: " + parts[0]);
-        }
-
-        // 校验端口
-        try {
-            int port = Integer.parseInt(parts[1]);
-            if (port < 1 || port > 65535) {
-                throw new IllegalArgumentException("Port must be between 1 and 65535");
+            int localPort = Integer.parseInt(parts[0]);
+            if (localPort < 0 || localPort > 65535) {
+                throw new IllegalArgumentException("Local port must be between 0 and 65535");
             }
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid port: " + parts[1]);
+            throw new IllegalArgumentException("Invalid local port: " + parts[0]);
+        }
+
+        // 远程IP/域名
+        try {
+            InetAddress.getByName(parts[1]);
+        } catch (UnknownHostException e) {
+            throw new IllegalArgumentException("Invalid host/IP address: " + parts[1]);
+        }
+
+        // 远程端口
+        try {
+            int remotePort = Integer.parseInt(parts[2]);
+            if (remotePort < 1 || remotePort > 65535) {
+                throw new IllegalArgumentException("Remote port must be between 1 and 65535");
+            }
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid remote port: " + parts[2]);
         }
     }
 
     @Override
     public CommDispatcher create(String commAddress) {
         String[] parts = commAddress.split(":");
-        return new UdpDispatcher(new UdpChannel(parts[0], Integer.parseInt(parts[1])));
+
+        int localPort = Integer.parseInt(parts[0]);
+        String remoteHost = parts[1];
+        int remotePort = Integer.parseInt(parts[2]);
+
+        return new UdpDispatcher(
+                new UdpChannel(remoteHost, remotePort, localPort)
+        );
     }
 }
