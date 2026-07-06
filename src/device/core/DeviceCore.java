@@ -64,9 +64,10 @@ public class DeviceCore {
 
     /**
      * 获取通信调度器
+     *
      * @return
      */
-    public CommDispatcher getCommDispatcher(){
+    public CommDispatcher getCommDispatcher() {
         return this.commDispatcher;
     }
 
@@ -176,6 +177,10 @@ public class DeviceCore {
         this.commDispatcher.write(DispatchMode.SEQUENTIAL, writeBytes, 10, retryCount, timeout, dataReceived);
     }
 
+    public final void write(byte[] writeBytes, DispatchMode dispatchMode, int priority, int retryCount, long timeout, BiConsumer<byte[], byte[]> dataReceived) {
+        this.commDispatcher.write(dispatchMode, writeBytes, priority, retryCount, timeout, dataReceived);
+    }
+
     /**
      * 写入ASCII码数据
      *
@@ -226,18 +231,44 @@ public class DeviceCore {
         this.commDispatcher.write(dispatchMode, writeBytes, priority, retryCount, timeout, dataReceived);
     }
 
+
+    public final <T> T writeSync(String ascii, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+        byte[] frame = ascii.getBytes(this.commDispatcher.getCharset());
+        return this.writeSync(frame, DispatchMode.SEQUENTIAL, 10, retryCount, timeout, parser);
+    }
+
+    public final <T> T writeSync(String ascii, int priority, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+        byte[] frame = ascii.getBytes(this.commDispatcher.getCharset());
+        return this.writeSync(frame, DispatchMode.SEQUENTIAL, priority, retryCount, timeout, parser);
+    }
+
+    public final <T> T writeSync(String ascii, DispatchMode dispatchMode, int priority, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+        byte[] frame = ascii.getBytes(this.commDispatcher.getCharset());
+        return this.writeSync(frame, dispatchMode, priority, retryCount, timeout, parser);
+    }
+
+    public final <T> T writeSync(byte[] bytes, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+        return this.writeSync(bytes, DispatchMode.SEQUENTIAL, 10, retryCount, timeout, parser);
+    }
+
+    public final <T> T writeSync(byte[] bytes, int priority, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+        return this.writeSync(bytes, DispatchMode.SEQUENTIAL, priority, retryCount, timeout, parser);
+    }
+
     /**
-     * 同步写入byte数组
+     * 同步写入(包装成同步)
      *
-     * @param frame      写入的byte数组
-     * @param retryCount 重试次数
-     * @param timeout    超时时间
-     * @param parser     业务处理回调函数
+     * @param frame        写入数据
+     * @param dispatchMode 队列策略
+     * @param priority     优先级
+     * @param retryCount   重试次数
+     * @param timeout      单次超时时间
+     * @param parser       回调业务解析函数
      * @param <T>
      * @return
      * @throws Exception
      */
-    public final <T> T writeSync(byte[] frame, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
+    public final <T> T writeSync(byte[] frame, DispatchMode dispatchMode, int priority, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
         CompletableFuture<T> future = new CompletableFuture<>();
 
         // 创建一个复合包装器
@@ -283,159 +314,14 @@ public class DeviceCore {
         };
 
         // 依然调用底层的 write 压入队列
-        this.write(frame, retryCount, timeout, callbackWrapper);
+        this.write(frame, dispatchMode, priority, retryCount, timeout, callbackWrapper);
 
         try {
-            // 主线程等待时间：(重试次数 + 1) * 单次超时 + 退避累加时间 + 缓冲
-            long maxWaitTime = (retryCount + 1) * timeout + (retryCount * 100) + 500;
-            return future.get(maxWaitTime, TimeUnit.MILLISECONDS);
+            return future.get();
         } catch (ExecutionException e) {
-            if (e.getCause() != null && e.getCause() instanceof Exception) {
-                throw (Exception) e.getCause(); // 抛出最后一次的真实异常给调用者
-            }
-            throw e;
-        }
-    }
-
-    /**
-     * 同步写入ascii码字符串
-     *
-     * @param frameASCII 写入的ascii码字符串
-     * @param retryCount 重试次数
-     * @param timeout    超时时间
-     * @param parser     业务处理回调函数
-     * @param <T>
-     * @return
-     * @throws Exception
-     */
-    public final <T> T writeSync(String frameASCII, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
-        CompletableFuture<T> future = new CompletableFuture<>();
-
-        // 创建一个复合包装器
-        CommCallbackWrapper callbackWrapper = new CommCallbackWrapper() {
-            private byte[] lastRead;
-            private byte[] lastWrite;
-
-            @Override
-            public void accept(byte[] readBytes, byte[] writeBytes) {
-                this.lastRead = readBytes;
-                this.lastWrite = writeBytes;
-
-                // 执行业务解析
-                T result = parser.apply(readBytes, writeBytes);
-
-                // 如果业务层返回 null（表示数据非法需要重试），主动抛出异常驱动重试
-                if (result == null) {
-                    throw new RuntimeException("业务校验未通过（数据包不完整或格式错误），触发退避重试");
-                }
-
-                // 如果解析成功且无异常，立刻使 Future 完结！让主线程无需等待，直接返回
-                future.complete(result);
-            }
-
-            @Override
-            public void notifyFinalResult(boolean success, Exception lastException) {
-                // 当所有的重试轮次全部结束（或者彻底失败）时，CommDispatcher 会调用这个方法
-                if (!success) {
-                    // 如果彻底失败了，把最后一次记录的异常注入到 future 中，唤醒主线程
-                    future.completeExceptionally(lastException != null ? lastException : new RuntimeException("未知通信错误"));
-                } else {
-                    // 安全兜底：确保 future 判定成功
-                    if (!future.isDone()) {
-                        try {
-                            T result = parser.apply(lastRead, lastWrite);
-                            future.complete(result);
-                        } catch (Exception e) {
-                            future.completeExceptionally(e);
-                        }
-                    }
-                }
-            }
-        };
-
-        // 依然调用底层的 write 压入队列
-        this.write(frameASCII, retryCount, timeout, callbackWrapper);
-
-        try {
-            // 主线程等待时间：(重试次数 + 1) * 单次超时 + 退避累加时间 + 缓冲
-            long maxWaitTime = (retryCount + 1) * timeout + (retryCount * 100) + 500;
-            return future.get(maxWaitTime, TimeUnit.MILLISECONDS);
-        } catch (ExecutionException e) {
-            if (e.getCause() != null && e.getCause() instanceof Exception) {
-                throw (Exception) e.getCause(); // 抛出最后一次的真实异常给调用者
-            }
-            throw e;
-        }
-    }
-
-    /**
-     * 同步写入
-     *
-     * @param frameASCII   写入的ascii字符串
-     * @param dispatchMode 队列策略
-     * @param priority     优先级
-     * @param retryCount   重试次数
-     * @param timeout      超时时间
-     * @param parser       业务处理回调函数
-     * @param <T>
-     * @return
-     * @throws Exception
-     */
-    public final <T> T writeSync(String frameASCII, DispatchMode dispatchMode, int priority, int retryCount, long timeout, BiFunction<byte[], byte[], T> parser) throws Exception {
-        CompletableFuture<T> future = new CompletableFuture<>();
-
-        // 创建一个复合包装器
-        CommCallbackWrapper callbackWrapper = new CommCallbackWrapper() {
-            private byte[] lastRead;
-            private byte[] lastWrite;
-
-            @Override
-            public void accept(byte[] readBytes, byte[] writeBytes) {
-                this.lastRead = readBytes;
-                this.lastWrite = writeBytes;
-
-                // 执行业务解析
-                T result = parser.apply(readBytes, writeBytes);
-
-                // 如果业务层返回 null（表示数据非法需要重试），主动抛出异常驱动重试
-                if (result == null) {
-                    throw new RuntimeException("业务校验未通过（数据包不完整或格式错误），触发退避重试");
-                }
-
-                // 如果解析成功且无异常，立刻使 Future 完结！让主线程无需等待，直接返回
-                future.complete(result);
-            }
-
-            @Override
-            public void notifyFinalResult(boolean success, Exception lastException) {
-                // 当所有的重试轮次全部结束（或者彻底失败）时，CommDispatcher 会调用这个方法
-                if (!success) {
-                    // 如果彻底失败了，把最后一次记录的异常注入到 future 中，唤醒主线程
-                    future.completeExceptionally(lastException != null ? lastException : new RuntimeException("未知通信错误"));
-                } else {
-                    // 安全兜底：确保 future 判定成功
-                    if (!future.isDone()) {
-                        try {
-                            T result = parser.apply(lastRead, lastWrite);
-                            future.complete(result);
-                        } catch (Exception e) {
-                            future.completeExceptionally(e);
-                        }
-                    }
-                }
-            }
-        };
-
-        // 依然调用底层的 write 压入队列
-        this.write(frameASCII, dispatchMode, priority, retryCount, timeout, callbackWrapper);
-
-        try {
-            // 主线程等待时间：(重试次数 + 1) * 单次超时 + 退避累加时间 + 缓冲
-            long maxWaitTime = (retryCount + 1) * timeout + (retryCount * 100) + 500;
-            return future.get(maxWaitTime, TimeUnit.MILLISECONDS);
-        } catch (ExecutionException e) {
-            if (e.getCause() != null && e.getCause() instanceof Exception) {
-                throw (Exception) e.getCause(); // 抛出最后一次的真实异常给调用者
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) {
+                throw (Exception) cause; // 抛出最后一次的真实异常给调用者
             }
             throw e;
         }

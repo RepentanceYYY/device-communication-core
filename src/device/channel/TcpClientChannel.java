@@ -70,6 +70,8 @@ public class TcpClientChannel extends CommChannel<Socket, Socket> {
             try {
                 clientSocket = new Socket();
                 clientSocket.connect(address, 2000);
+                clientSocket.setKeepAlive(true);
+                clientSocket.setSoTimeout(5000);
                 break;
             } catch (IOException connectEx) {
                 if (maxTryCount != -1 && maxTryCount >= tryCount++) {
@@ -167,13 +169,14 @@ public class TcpClientChannel extends CommChannel<Socket, Socket> {
 
                 // 只要连接是开着的且没被中断，就一直读
                 while (isOpen && !Thread.currentThread().isInterrupted()) {
-                    // 阻塞等待数据
-                    int len = input.read(buffer);
-                    // 对端关闭了连接
-                    if (len == -1) break;
-                    // 复制并处理数据
-                    byte[] data = Arrays.copyOf(buffer, len);
-                    onReceiveEvent(clientSocket, data, len);
+                    try {
+                        int len = input.read(buffer);
+                        if (len == -1) break; // 对端正常关闭
+
+                        byte[] data = Arrays.copyOf(buffer, len);
+                        onReceiveEvent(clientSocket, data, len);
+                    } catch (java.net.SocketTimeoutException e) {
+                    }
                 }
             } catch (IOException e) {
                 if (isOpen) {

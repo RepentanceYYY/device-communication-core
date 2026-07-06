@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.util.Arrays;
 
 /**
@@ -54,7 +55,8 @@ public class UdpChannel extends CommChannel<DatagramSocket, DatagramPacket> {
         }
 
         socket = new DatagramSocket(localPort);
-
+        // 设置 2 秒超时。2秒内没收到任何UDP包，receive() 就会解开阻塞并抛出 SocketTimeoutException
+        socket.setSoTimeout(2000);
         isOpen = true;
 
         triggerOpen(socket);
@@ -96,12 +98,13 @@ public class UdpChannel extends CommChannel<DatagramSocket, DatagramPacket> {
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
-                    socket.receive(packet); // 阻塞
+                    socket.receive(packet); // 阻塞，但最多等 2 秒
 
                     byte[] data = Arrays.copyOf(packet.getData(), packet.getLength());
-
                     onReceiveEvent(packet, data, data.length);
 
+                } catch (SocketTimeoutException e) {
+                    continue;
                 } catch (IOException e) {
                     if (isOpen) {
                         System.err.println("UDP接收异常: " + e.getMessage());

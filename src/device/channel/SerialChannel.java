@@ -95,9 +95,22 @@ public class SerialChannel extends CommChannel<SerialPort, SerialPort> {
         readThread.start();
     }
 
-    public void send(byte[] data) {
-        if (getIsOpen()) {
-            serialPort.writeBytes(data, data.length);
+    public void send(byte[] data) throws IOException {
+        if (!getIsOpen()) {
+            throw new IOException("串口未打开，无法发送数据");
+        }
+
+        // 执行写入
+        int written = serialPort.writeBytes(data, data.length);
+
+        // 如果驱动直接明确返回失败
+        if (written < 0) {
+            throw new IOException("串口写入物理错误，底层驱动返回失败");
+        }
+
+        // 如果数据没发全（半写情况）
+        if (written < data.length) {
+            throw new IOException("串口数据未完全写入 (半写错误), 预期发送: " + data.length + " 字节, 实际发送: " + written + " 字节");
         }
     }
 

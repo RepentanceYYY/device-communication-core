@@ -39,6 +39,13 @@ public abstract class CommDispatcher {
             new ThreadPoolExecutor.DiscardOldestPolicy()
     );
 
+    // 专门用来执行写入操作的线程池，避免卡死主调度循环
+    private final ExecutorService writeExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "commDispatcher-write-worker");
+        t.setDaemon(true);
+        return t;
+    });
+
     // 锁机制，用于精准控制发送与响应的同步
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition responseCondition = lock.newCondition();
@@ -84,6 +91,11 @@ public abstract class CommDispatcher {
      * 当前动作
      */
     protected volatile Task currentTask;
+
+    /**
+     * 写入超时时间
+     */
+    private volatile long writeTimeout = 50L;
 
     /**
      * 写入数据
@@ -299,11 +311,30 @@ public abstract class CommDispatcher {
                     } else {
                         System.out.println("[CommDispatcher] [第 " + (initialRetryCount - retries) + " 次重试] 数据: " + hexData);
                     }
-
-                    write(task);
+                    final Task finalTask = task;
+                    java.util.concurrent.Future<?> writeFuture = writeExecutor.submit(() -> {
+                        try {
+                            write(finalTask);
+                            return null;
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+                    try {
+                        writeFuture.get(this.writeTimeout, TimeUnit.MILLISECONDS);
+                    } catch (TimeoutException e) {
+                        writeFuture.cancel(true); // 取消写入任务（尝试中断底层线程）
+                        throw new RuntimeException("底层网络写入卡死/超时保护触发", e);
+                    } catch (ExecutionException e) {
+                        // 还原真实的 IOException
+                        if (e.getCause() instanceof RuntimeException && e.getCause().getCause() instanceof IOException) {
+                            throw (IOException) e.getCause().getCause();
+                        }
+                        throw e;
+                    }
 
                     if (strategy == CommMode.WAIT_RESPONSE) {
-                        // 1. 等待底层物理响应
+                        // 等待底层物理响应
                         boolean hasResponse = responseCondition.await(task.getTimeout(), TimeUnit.MILLISECONDS);
                         if (hasResponse) {
                             responseData = this.lastReadBytes;
